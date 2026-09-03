@@ -53,6 +53,9 @@ enum HCCHomeSheet: Identifiable, Hashable {
   case alarm
   case customize
   case addActivity
+  /// HCC: the live workout's setup sheet, which then presents the running
+  /// screen full-screen over itself.
+  case live
   /// A surface that belongs to a later phase; the string is what the sheet
   /// names ("Coach", "Live activity").
   case comingSoon(String)
@@ -63,6 +66,7 @@ enum HCCHomeSheet: Identifiable, Hashable {
     case .alarm: "alarm"
     case .customize: "customize"
     case .addActivity: "addActivity"
+    case .live: "live"
     case let .comingSoon(feature): "comingSoon:\(feature)"
     }
   }
@@ -106,6 +110,8 @@ struct HCCHomeSheetHost: View {
       HCCCustomizeSheet(store: store)
     case .addActivity:
       HCCAddActivitySheet(store: store)
+    case .live:
+      HCCLiveSetupSheet(store: store)
     case let .comingSoon(feature):
       HCCComingSoonSheet(feature: feature)
     }

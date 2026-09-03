@@ -9,6 +9,11 @@ struct AppShellView: View {
   // HCC: `bottomTabs` reads the provider switch. Observing the same key here is
   // what makes the tab bar redraw if the switch changes under a live shell.
   @AppStorage(HCCProviderSettings.storageKey) private var providerRaw = HealthMetricProvider.bridge.rawValue
+  // HCC: the Coach is one sheet over the whole cloud shell, not a tab and not a
+  // per-screen object — the mockup's FAB lives in the phone chrome, and a model
+  // owned per tab would lose the thread every time the owner switched tabs.
+  @StateObject private var coach = HCCCoachChatModel()
+  @State private var isCoachPresented = false
 
   var body: some View {
     // HCC: cloud mode wears the "C · Command" chrome — the system tab bar is
@@ -57,20 +62,91 @@ struct AppShellView: View {
   }
 
   // HCC: the system bar is hidden per stack rather than removed, so each tab
-  // keeps its own navigation state across a switch; the custom bar rides in a
-  // bottom safe-area inset, which is what keeps a scrolling screen's last row
-  // clear of it without a magic number.
+  // keeps its own navigation state across a switch; the custom bar is laid out
+  // under each stack (see the note inside), which is what keeps a scrolling
+  // screen's last row clear of it without a magic number.
   private var cloudShell: some View {
     TabView(selection: tabSelection) {
       ForEach(OpenVitalsAppTab.bottomTabs) { tab in
-        tabNavigationStack(for: tab)
-          .toolbar(.hidden, for: .tabBar)
-          .tag(tab)
+        // The bar is laid out UNDER each tab's stack rather than as a
+        // safe-area inset: an inset on the TabView (or on the stack) never
+        // reached the ScrollViews inside the per-tab NavigationStacks, and every
+        // scrolling screen's last card ended up clamped under the bar by exactly
+        // its height. A plain VStack bounds the stack above the bar for certain.
+        VStack(spacing: 0) {
+          // HCC: the Coach FAB overlays the STACK, not the VStack, so it sits
+          // above the tab bar by construction rather than by a magic offset —
+          // the same reasoning as the bar's own layout above.
+          tabNavigationStack(for: tab)
+            .overlay(alignment: .bottomTrailing) { coachFAB }
+          HCCTabBar(selection: tabSelection, tabs: OpenVitalsAppTab.bottomTabs)
+        }
+        .toolbar(.hidden, for: .tabBar)
+        .tag(tab)
       }
     }
     .tint(HCCTheme.Color.accent)
-    .safeAreaInset(edge: .bottom, spacing: 0) {
-      HCCTabBar(selection: tabSelection, tabs: OpenVitalsAppTab.bottomTabs)
+    .sheet(isPresented: $isCoachPresented) {
+      HCCCoachSheet(model: coach, pageContext: coachPageContext)
+    }
+    // HCC: `AppRouter.openCoach` (and the server's deep links through it) ask
+    // for the Coach by bumping this counter — the shell owns the sheet, so this
+    // is where the request is honoured.
+    .onChange(of: router.hccCoachRequested) { _, _ in presentCoach() }
+    .onAppear(perform: presentCoachOnLaunchIfRequested)
+  }
+
+  // HCC: hidden while the sheet is up — the mockup hides the FAB behind its own
+  // sheet, and a button that opens what is already open is noise.
+  @ViewBuilder
+  private var coachFAB: some View {
+    if !isCoachPresented {
+      HCCCoachFAB { presentCoach() }
+        .padding(.trailing, 14)
+        .padding(.bottom, 14)
+    }
+  }
+
+  private func presentCoach() {
+    // A prefilled prompt from a deep link becomes the draft; it is never sent
+    // for the owner — they still press send.
+    let prompt = router.coachPromptDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !prompt.isEmpty {
+      coach.draft = prompt
+      router.coachPromptDraft = ""
+    }
+    isCoachPresented = true
+  }
+
+  // HCC: `HCC_DEBUG_OPEN_COACH=1` opens the sheet on launch. `simctl` cannot tap,
+  // so without this hook no scripted run could screenshot the Coach at all.
+  // DEBUG only and a no-op without the variable.
+  private func presentCoachOnLaunchIfRequested() {
+    #if DEBUG
+    guard HCCProviderSettings.isCloud, HCCCoachChatModel.debugWantsSheet else { return }
+    isCoachPresented = true
+    #endif
+  }
+
+  /// The short label the Coach sends as `pageContext` — which screen the
+  /// question was asked from, and for Home which civil day is on screen. The day
+  /// is the INSTANCE's, never the device's.
+  private var coachPageContext: String {
+    switch router.selectedTab {
+    case .home:
+      "mobile:home \(HealthDataStore.hccDayKey(homeSelectedDate))"
+    case .health:
+      "mobile:health"
+    case .journal:
+      "mobile:journal"
+    case .training:
+      "mobile:training"
+    case .more:
+      "mobile:more"
+    case .coach:
+      "mobile:coach"
+    case .developer:
+      "mobile:collect"
     }
   }
 
@@ -149,12 +225,12 @@ struct AppShellView: View {
       } else {
         HealthView(store: healthStore)
       }
-    // HCC: the two reserved tabs. One themed line each — no controls, because a
-    // control that does nothing is worse than an empty page.
+    // HCC: the Journal and Training tabs are cloud-only screens; each owns its
+    // own root file so the two can evolve without touching the shell again.
     case .journal:
-      HCCPhaseScreen(title: "Journal", note: "Journal arrives in Phase 3.")
+      HCCJournalView(store: healthStore)
     case .training:
-      HCCPhaseScreen(title: "Training", note: "Training arrives in Phase 3.")
+      HCCTrainingView(store: healthStore)
     case .coach:
       CoachView(healthStore: healthStore)
     case .developer:

@@ -13,6 +13,23 @@ enum HealthKitPermissionRequester {
 
     return await HealthKitProfileImporter.requestProfileAccess()
   }
+
+  // HCC: in cloud mode this onboarding step is not the body-mass prefill — it is
+  // the Apple Watch upload opt-in (plan §4.6). It asks for the uploader's read
+  // set and turns the upload on, which is the only reason a cloud user is being
+  // shown a Health prompt at all. Bridge mode is untouched.
+  @MainActor
+  static func requestHCCWatchUploadAccess() async -> HealthKitProfileImportResult {
+    guard HKHealthStore.isHealthDataAvailable() else {
+      return HealthKitProfileImportResult(status: "Unavailable on this device", autofill: .empty)
+    }
+    let uploader = HCCHealthKitUploader.shared
+    await uploader.setEnabled(true)
+    if let error = uploader.state.lastError {
+      return HealthKitProfileImportResult(status: "Failed: \(error)", autofill: .empty)
+    }
+    return HealthKitProfileImportResult(status: uploader.state.authorization.label, autofill: .empty)
+  }
 }
 
 struct LocationPermissionResult {

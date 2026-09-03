@@ -2,10 +2,14 @@ import SwiftUI
 
 /// The mockup's `.fab`: a 50-pt gradient circle bottom-right, above the tab bar.
 ///
-/// In this phase the Coach has no backend, no persistence and no consent path
-/// (AGENTS.md keeps it out until it does), so the button is present and says so
-/// rather than being wired to nothing. A dead tap reads as a bug; this opens
-/// the shared "arrives in a later phase" sheet.
+/// It sits in the shell rather than on a screen, exactly as the mockup has it —
+/// the Coach is asked from wherever the owner already is, and the sheet it opens
+/// carries the name of that screen as its `pageContext` so a question about
+/// "this" resolves against what is behind the sheet.
+///
+/// The design review kept this button hidden until the chat actually worked, on
+/// the rule that a control which does nothing must not exist. It works now: the
+/// tap opens `HCCCoachSheet` over the current tab.
 struct HCCCoachFAB: View {
   let action: () -> Void
 
@@ -28,6 +32,6 @@ struct HCCCoachFAB: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Coach")
-    .accessibilityHint("Arrives in a later phase")
+    .accessibilityHint("Ask your Command Center about your data")
   }
 }

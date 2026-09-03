@@ -26,7 +26,10 @@ enum OnboardingStep: Int, CaseIterable {
     case .hccSignIn:
       return "Sign in"
     case .healthKit:
-      return "Import Weight"
+      // HCC: the step asks for two different things depending on the provider —
+      // the body-mass prefill in bridge mode, the Apple Watch upload in cloud
+      // mode — and the heading has to name the one actually being asked for.
+      return HCCProviderSettings.isCloud ? "Apple Watch" : "Import Weight"
     case .location:
       return "Enable Location"
     case .bluetooth:

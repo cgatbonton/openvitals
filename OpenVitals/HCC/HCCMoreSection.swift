@@ -8,12 +8,18 @@ import SwiftUI
 // statements about what this phase does and does not do yet, and a system
 // switch beside one of those would promise a behaviour that has not shipped.
 //
-// Nothing on this screen fakes a control. Every Phase 4 row is a muted line
-// saying when it arrives; the rows that DO something open a sheet or navigate.
+// Nothing on this screen fakes a control. A row is either a real switch, a row
+// that opens a sheet or navigates, or a statement of fact — the two push rows
+// report what the OS and the server say, because nothing on this phone decides
+// what the instance sends.
 
 struct HCCMoreScreen: View {
   @ObservedObject var healthStore: HealthDataStore
   @ObservedObject private var session = HCCSession.shared
+  // HCC: P4-P. The Notifications card states what the OS and the server each
+  // say about push, rather than promising a phase.
+  @ObservedObject private var push = HCCPushRegistrar.shared
+  @ObservedObject private var liveActivity = HCCStrainLiveActivityController.shared
 
   @EnvironmentObject private var model: OpenVitalsAppModel
   @EnvironmentObject private var router: AppRouter
@@ -46,7 +52,13 @@ struct HCCMoreScreen: View {
     } message: {
       Text("This revokes the session on the server and deletes it from this iPhone. You will be taken back to setup to choose a source again.")
     }
-    .onAppear(perform: applyDebugScreenIfRequested)
+    .onAppear {
+      startAlarmScheduler()
+      applyDebugScreenIfRequested()
+    }
+    // HCC: the OS's answer can change while the app is backgrounded (Settings),
+    // so the two push rows are re-read rather than cached from launch.
+    .task { await push.refreshAuthorization() }
     // More reads the account-scoped payloads (devices, tiles, alarm) that the
     // refresh loop fetches once per session. Home normally triggers that, but
     // this screen must not depend on Home having been visited — a restored tab
@@ -81,9 +93,10 @@ struct HCCMoreScreen: View {
       HCCLabel("Devices & data")
       VStack(spacing: 0) {
         HCCMenuRow(title: "Devices", detail: deviceCount) { sheet = .devices }
-        HCCMenuRow(title: "Apple Watch upload", detail: "Not set up yet")
+        // HCC: P3-H's row and sheet — the real upload state, not a placeholder.
+        HCCWatchUploadRow(uploader: HCCHealthKitUploader.shared) { sheet = .watchUpload }
         HCCMenuRow(title: "Log a reading", detail: "Weight, BP, glucose") {
-          sheet = .comingSoon("Logging a reading")
+          sheet = .logReading
         }
         HCCMenuRow(title: "Dashboard tiles", detail: tileCount, showsDivider: false) { sheet = .customize }
       }
@@ -91,15 +104,34 @@ struct HCCMoreScreen: View {
     .hccCard()
   }
 
+  /// Push state, said plainly.
+  ///
+  /// The two alert rows are NOT switches, and that is the honest shape: this
+  /// app does not choose what to send. The instance's own rules decide whether
+  /// a morning recovery card or an insight is worth a notification, so the only
+  /// thing the phone can report is whether it is allowed to receive one and
+  /// whether the server knows how to reach it. The footnote says so, rather
+  /// than leaving two rows that look like they should be tappable.
   private var notificationsCard: some View {
     VStack(alignment: .leading, spacing: 8) {
       HCCLabel("Notifications")
       VStack(spacing: 0) {
-        HCCMenuRow(title: "Morning recovery", detail: Self.phase4)
-        HCCMenuRow(title: "Insight alerts", detail: Self.phase4)
+        HCCMenuRow(title: "Morning recovery", detail: push.state.rowDetail)
+        HCCMenuRow(title: "Insight alerts", detail: push.state.rowDetail)
         HCCMenuRow(title: "Alarm", detail: alarmSummary) { sheet = .alarm }
-        HCCMenuRow(title: "Strain Live Activity", detail: Self.phase4, showsDivider: false)
+        HCCToggleRow(
+          title: "Strain Live Activity",
+          isOn: Binding(
+            get: { liveActivity.isEnabled },
+            set: { liveActivity.setEnabled($0, store: healthStore) }
+          ),
+          showsDivider: false
+        )
       }
+      if let note = push.state.note {
+        HCCFootnote(note)
+      }
+      HCCFootnote(liveActivityNote)
     }
     .hccCard()
   }
@@ -114,7 +146,7 @@ struct HCCMoreScreen: View {
         HCCMenuRow(title: "Appearance", detail: "System") {
           router.morePath.append(.appearance)
         }
-        HCCMenuRow(title: "Widgets", detail: "Later")
+        HCCMenuRow(title: "Widgets", detail: widgetSummaryDetail) { sheet = .widgets }
         HCCMenuRow(title: "Privacy & data flow") { sheet = .consent }
         HCCMenuRow(title: "Sign out", detail: isSigningOut ? "Signing out…" : nil, showsDivider: false) {
           guard !isSigningOut else { return }
@@ -127,7 +159,24 @@ struct HCCMoreScreen: View {
 
   // ── Values ─────────────────────────────────────────────────────────────────
 
-  private static let phase4 = "Arrives with push (Phase 4)"
+  /// One sentence saying who decides what arrives, plus whatever the Live
+  /// Activity currently is or is not doing.
+  private var liveActivityNote: String {
+    let base = "Your command center decides what is worth a notification; this iPhone only says whether it can receive one."
+    guard liveActivity.isEnabled else { return base }
+    // The controller's own line, minus its "On · " prefix and any full stop it
+    // already ends with — the server's reasons are whole sentences.
+    let detail = liveActivity.rowDetail
+      .replacingOccurrences(of: "On · ", with: "")
+      .trimmingCharacters(in: CharacterSet(charactersIn: " ."))
+    return "\(base) Live Activity: \(detail)."
+  }
+
+  /// When the widgets last had something new to draw.
+  private var widgetSummaryDetail: String {
+    guard let updatedAt = HCCWidgetStore.read()?.updatedAt else { return "No summary yet" }
+    return "Updated \(HCCPushClock.time(updatedAt))"
+  }
 
   private var signedInAs: String {
     session.account?.displayName.nilIfBlank
@@ -167,6 +216,15 @@ struct HCCMoreScreen: View {
       HCCCustomizeSheet(store: healthStore)
     case .alarm:
       HCCAlarmSheet(store: healthStore)
+    case .logReading:
+      HCCLogReadingSheet(store: healthStore, state: healthStore.hccReadings)
+    case .logReadingPicker:
+      HCCLogReadingSheet(store: healthStore, state: healthStore.hccReadings, opensPicker: true)
+    // HCC: P3-H's upload sheet and P4-P's widgets sheet.
+    case .watchUpload:
+      HCCWatchUploadSheet(uploader: HCCHealthKitUploader.shared)
+    case .widgets:
+      HCCWidgetsSheet()
     case .addActivity:
       HCCAddActivitySheet(store: healthStore)
     case let .activity(id):
@@ -201,13 +259,30 @@ struct HCCMoreScreen: View {
     }
   }
 
+  // ── Alarm scheduling ───────────────────────────────────────────────────────
+
+  /// Bring `HCCAlarmScheduler` to life and point it at this store.
+  ///
+  /// The scheduler is what turns the server's alarm row into something the OS
+  /// will ring; touching `.shared` is also what registers its
+  /// `didBecomeActiveNotification` observer, so an app that sat overnight
+  /// re-resolves the wake time when it comes back. More is the screen that owns
+  /// the Alarm row, so it is the screen that starts it — an app-launch touch
+  /// point will replace this once `OpenVitalsApp` is free to edit.
+  ///
+  /// Idempotent: `observe(_:)` no-ops when it is already following this store.
+  private func startAlarmScheduler() {
+    HCCAlarmScheduler.shared.observe(healthStore)
+  }
+
   // ── Verification hook ──────────────────────────────────────────────────────
 
   /// DEBUG only. `HCC_DEBUG_OPEN_SCREEN=<screen>` on the launch environment
   /// opens one of this workstream's sheets as soon as More appears, so each can
   /// be screenshotted without UI automation.
   ///
-  ///   more | devices | customize | alarm | addActivity | activity:<id>
+  ///   more | devices | customize | alarm | logReading | logReadingPicker |
+  ///   addActivity | activity:<id> | notifications | widgets
   ///
   /// `gallery` is D-A1's value and is handled on the Home tab; anything this
   /// screen does not recognise is ignored, so the two switches share one
@@ -219,7 +294,11 @@ struct HCCMoreScreen: View {
     guard let raw = ProcessInfo.processInfo.environment["HCC_DEBUG_OPEN_SCREEN"], !raw.isEmpty else {
       return nil
     }
-    let known = ["more", "devices", "customize", "alarm", "addActivity"]
+    let known = [
+      "more", "devices", "customize", "alarm", "logReading", "logReadingPicker", "addActivity",
+      // HCC: P4-P
+      "notifications", "widgets",
+    ]
     return known.contains(raw) || raw.hasPrefix("activity:") ? raw : nil
   }
 
@@ -241,7 +320,12 @@ struct HCCMoreScreen: View {
     case "devices": sheet = .devices
     case "customize": sheet = .customize
     case "alarm": sheet = .alarm
+    case "logReading": sheet = .logReading
+    case "logReadingPicker": sheet = .logReadingPicker
     case "addActivity": sheet = .addActivity
+    // HCC: P4-P. `notifications` opens no sheet — the card is on this screen,
+    // so landing on More with nothing presented IS the screenshot.
+    case "widgets": sheet = .widgets
     default: break
     }
     #endif
@@ -253,6 +337,15 @@ enum HCCMoreSheet: Identifiable {
   case devices
   case customize
   case alarm
+  case logReading
+  /// Same sheet, opened straight onto its metric picker. Reachable only from
+  /// the DEBUG launch hook, so the picker can be screenshotted without a tap.
+  case logReadingPicker
+  /// P3-H's Apple Watch upload sheet, opened from Devices & data.
+  case watchUpload
+  /// What widgets exist, how to place one, and whether the shared container is
+  /// actually shared.
+  case widgets
   case addActivity
   case activity(String)
   case consent
@@ -263,6 +356,10 @@ enum HCCMoreSheet: Identifiable {
     case .devices: "devices"
     case .customize: "customize"
     case .alarm: "alarm"
+    case .logReading: "logReading"
+    case .logReadingPicker: "logReadingPicker"
+    case .watchUpload: "watchUpload"
+    case .widgets: "widgets"
     case .addActivity: "addActivity"
     case let .activity(id): "activity:\(id)"
     case .consent: "consent"

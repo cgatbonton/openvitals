@@ -568,6 +568,10 @@ struct HCCInstance: Decodable {
   let sources: [String]
   let scoreBands: HCCScoreBands
   let wearableOptimalRanges: [String: HCCOptimalRange]
+  // HCC: the zone cuts the live workout screen bins against. Optional because a
+  // deployment that predates them must still decode — the phone then falls back
+  // to `HCCZoneConfig.fallback` and says on screen that it did.
+  let zones: HCCZoneConfig?
 }
 
 struct HCCScoreBands: Decodable {

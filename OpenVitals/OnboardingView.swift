@@ -145,19 +145,39 @@ struct OnboardingView: View {
         focusedField: $focusedField
       )
     case .healthKit:
-      OnboardingPermissionStep(
-        systemImage: "heart.fill",
-        title: "HealthKit",
-        bodyText: "OpenVitals uses HealthKit only to prefill profile values.",
-        details: [
-          "Body weight to prefill your profile",
-          "No steps, calories, workouts, sleep, or recovery metrics imported",
-        ],
-        buttonTitle: "Import Weight",
-        isRequesting: healthKitRequesting,
-        tint: .red,
-        action: requestHealthKitAccess
-      )
+      // HCC: in cloud mode this step means something else entirely — it is the
+      // Apple Watch upload opt-in, not the body-mass prefill (plan §4.6). Two
+      // different asks cannot share one screen's copy, so the branch is here.
+      if HCCProviderSettings.isCloud {
+        OnboardingPermissionStep(
+          systemImage: "applewatch",
+          title: "Apple Watch",
+          bodyText: "Apple Watch readings are uploaded to your Command Center, where the rest of your data already lives.",
+          details: [
+            "Heart-rate variability, resting heart rate, breathing rate, blood oxygen, wrist temperature, VO2 max, steps and energy",
+            "Sleep stages and workouts, with the heart-rate samples inside each workout",
+            "Only readings the Watch itself recorded — anything another app wrote into Health is left alone",
+          ],
+          buttonTitle: "Allow and upload",
+          isRequesting: healthKitRequesting,
+          tint: .red,
+          action: requestHealthKitAccess
+        )
+      } else {
+        OnboardingPermissionStep(
+          systemImage: "heart.fill",
+          title: "HealthKit",
+          bodyText: "OpenVitals uses HealthKit only to prefill profile values.",
+          details: [
+            "Body weight to prefill your profile",
+            "No steps, calories, workouts, sleep, or recovery metrics imported",
+          ],
+          buttonTitle: "Import Weight",
+          isRequesting: healthKitRequesting,
+          tint: .red,
+          action: requestHealthKitAccess
+        )
+      }
     case .location:
       OnboardingPermissionStep(
         systemImage: "location.fill",
@@ -463,7 +483,11 @@ struct OnboardingView: View {
     model.recordUIAction("onboarding.healthkit.requested")
 
     Task {
-      let result = await HealthKitPermissionRequester.requestAccess()
+      // HCC: cloud mode asks for the Watch upload read set instead; it fills in
+      // no profile value, so the autofill call below is a no-op for it.
+      let result = HCCProviderSettings.isCloud
+        ? await HealthKitPermissionRequester.requestHCCWatchUploadAccess()
+        : await HealthKitPermissionRequester.requestAccess()
       await MainActor.run {
         healthKitStatus = result.status
         applyHealthKitProfileAutofill(result.autofill, overwrite: false)

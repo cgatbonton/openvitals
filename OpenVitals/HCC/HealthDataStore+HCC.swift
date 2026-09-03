@@ -96,6 +96,23 @@ final class HCCStoreState {
   var hasSessionReads: Bool { instance != nil && dashboard != nil && alarm != nil }
 
   var hasAnyData: Bool { !homeByDate.isEmpty || sleep != nil || !vitals.isEmpty }
+
+  // ── Per-feature state slots ────────────────────────────────────────────────
+
+  /// Feature state boxes (journal, training, uploads, live workout, coach…)
+  /// keyed by type. Each feature keeps its own `ObservableObject` in its own
+  /// file and reaches it through `slot(_:)`, so adding a feature never edits
+  /// this class and views observe exactly the box they draw from.
+  private var slots: [ObjectIdentifier: AnyObject] = [:]
+
+  /// The one box of type `T`, created on first use.
+  func slot<T: AnyObject>(_ make: () -> T) -> T {
+    let key = ObjectIdentifier(T.self)
+    if let existing = slots[key] as? T { return existing }
+    let made = make()
+    slots[key] = made
+    return made
+  }
 }
 
 // ── Refresh ──────────────────────────────────────────────────────────────────
@@ -324,6 +341,15 @@ extension HealthDataStore {
     hcc.lastError = failures.first?.errorDescription
     healthMetricRefreshStatus = hcc.lastError ?? "Updated \(Self.hccClockText(Date()))"
     rebuildHCCDashboardState()
+
+    // HCC: the widgets and the Live Activity read what this loop just cached.
+    // Registering the store here rather than at app launch is what lets a
+    // silent push or a `BGAppRefreshTask` reach the same instance the screens
+    // use — the store is a `@StateObject` on the shell, so at launch there is
+    // not one yet. See `HCCAppServices` in HCCAppDelegate.swift.
+    HCCAppServices.shared.register(self)
+    HCCWidgetBridge.publish(from: self)
+    HCCStrainLiveActivityController.shared.sync(from: self)
   }
 
   /// Rebuild every published property from whatever is cached. Cheap and pure —

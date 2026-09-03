@@ -10,6 +10,9 @@ import SwiftUI
 /// sub-view left its loaders unobserved and the cards stuck on "Loading…".
 struct HCCHealthView: View {
   @ObservedObject var store: HealthDataStore
+  // HCC: a tapped push notification lands here — see `pushDestination` below.
+  @EnvironmentObject private var router: AppRouter
+  @State private var pushDestination: HCCDeepLinkTarget?
 
   init(store: HealthDataStore) {
     self.store = store
@@ -23,8 +26,25 @@ struct HCCHealthView: View {
     case protocols
   }
 
-  @ViewBuilder
   var body: some View {
+    content
+      // HCC: presented rather than pushed. The Health tab's `NavigationStack`
+      // is built by the shell with no path binding (AppShellView.swift:113-117),
+      // so nothing outside a tap can push onto it, and a second stack nested
+      // inside it swallows the landing's own `navigationDestination`s. A cover
+      // reaches the same screen with the same header and the same `dismiss()`
+      // back button; the only visible difference is that it slides up.
+      .fullScreenCover(item: $pushDestination) { target in
+        HCCPushDestinationView(target: target, store: store)
+      }
+      .onAppear(perform: consumePushDestination)
+      .onChange(of: router.hccPendingHealthDestination) { _, _ in
+        consumePushDestination()
+      }
+  }
+
+  @ViewBuilder
+  private var content: some View {
     #if DEBUG
     // HCC: `HCC_DEBUG_OPEN_SCREEN=recovery|sleep|strain|health|biomarkers|
     // insights|genetics|protocols` opens one screen straight from the launch
@@ -40,6 +60,40 @@ struct HCCHealthView: View {
     #else
     HCCHealthLanding(store: store)
     #endif
+  }
+
+  /// Take the pending destination and clear it, so the same notification tapped
+  /// twice opens the screen twice rather than the second tap doing nothing.
+  private func consumePushDestination() {
+    guard let target = router.hccPendingHealthDestination else { return }
+    router.hccPendingHealthDestination = nil
+    // `settings` is routed to More by the router itself and never arrives here.
+    guard target != .settings else { return }
+    pushDestination = target
+  }
+}
+
+/// Where a tapped notification lands: the detail for TODAY, or the Insights
+/// page. The day is today's on purpose — a push is about now, and the detail
+/// screens resolve `nil` to the current civil day in the instance's zone.
+private struct HCCPushDestinationView: View {
+  let target: HCCDeepLinkTarget
+  @ObservedObject var store: HealthDataStore
+
+  var body: some View {
+    Group {
+      switch target {
+      case .recovery: HCCRecoveryView(store: store, dayKey: nil)
+      case .sleep: HCCSleepView(store: store, dayKey: nil)
+      case .strain: HCCStrainView(store: store, dayKey: nil)
+      case .insights, .settings: HCCInsightsView(store: store)
+      }
+    }
+    // A push can arrive on a cold launch, before any screen has read anything.
+    .task {
+      guard store.hcc.homeByDate.isEmpty else { return }
+      await store.refreshFromHCC()
+    }
   }
 }
 
@@ -301,6 +355,9 @@ enum HCCDebugScreen: String {
   case insights
   case genetics
   case protocols
+  // HCC: P3-H — the Apple Watch upload sheet lives on the More screen, which
+  // this workstream does not own; this makes it reachable for verification.
+  case watchUpload
 
   static var requested: HCCDebugScreen? {
     guard let raw = ProcessInfo.processInfo.environment["HCC_DEBUG_OPEN_SCREEN"] else { return nil }
@@ -343,6 +400,8 @@ struct HCCDebugScreenHost: View {
     case .insights: HCCInsightsView(store: store)
     case .genetics: HCCGeneticsView(store: store)
     case .protocols: HCCProtocolsView(store: store)
+    // HCC: P3-H
+    case .watchUpload: HCCWatchUploadSheet(uploader: HCCHealthKitUploader.shared)
     }
   }
 }

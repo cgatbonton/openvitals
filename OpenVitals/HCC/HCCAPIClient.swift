@@ -92,6 +92,25 @@ final class HCCAPIClient: @unchecked Sendable {
     try await send("POST", path, query: [:], body: nil, retryable: false)
   }
 
+  /// Bare-object POST with a body — the web write routes (`/api/journal/*`,
+  /// `/api/training/*`, `/api/measurements`) answer with `ok()`.
+  @discardableResult
+  func postBare<Body: Encodable, T: Decodable>(_ path: String, body: Body) async throws -> T {
+    try await send("POST", path, query: [:], body: try encode(body), retryable: false)
+  }
+
+  /// Bare-object PUT with a body (`/api/journal/day/{date}`, `/api/training/plan`).
+  @discardableResult
+  func putBare<Body: Encodable, T: Decodable>(_ path: String, body: Body) async throws -> T {
+    try await send("PUT", path, query: [:], body: try encode(body), retryable: false)
+  }
+
+  /// Bare-object DELETE (`/api/journal/doses?id=`, `/api/conversations/{id}`).
+  @discardableResult
+  func deleteBare<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
+    try await send("DELETE", path, query: query, body: nil, retryable: false)
+  }
+
   @discardableResult
   func put<Body: Encodable, T: Decodable>(_ path: String, body: Body) async throws -> T {
     let envelope: HCCEnvelope<T> = try await send("PUT", path, query: [:], body: try encode(body), retryable: false)

@@ -6,6 +6,10 @@ struct OpenVitalsApp: App {
   @StateObject private var model = OpenVitalsAppModel()
   @StateObject private var router = AppRouter()
   @AppStorage(OpenVitalsAppearancePreference.storageKey) private var appearancePreferenceRaw = OpenVitalsAppearancePreference.dark.rawValue
+  // HCC: push registration, silent-push refresh, background-upload completion
+  // and notification taps (plan §4.7). Every method inside is gated on cloud
+  // mode, so the bridge build behaves exactly as it did without a delegate.
+  @UIApplicationDelegateAdaptor(HCCAppDelegate.self) private var hccDelegate
 
   init() {
     OpenVitalsTheme.configureAppearance()
@@ -16,6 +20,17 @@ struct OpenVitalsApp: App {
     #if DEBUG
     HCCSession.bootstrapForDebugLaunchIfNeeded()
     #endif
+    // HCC: Apple Watch → Command Center upload (plan §4.6). Registers the daily
+    // background task and, only when the user has turned the feature on in
+    // cloud mode, starts the HealthKit observers. No-op otherwise.
+    if HCCProviderSettings.isCloud {
+      Task { @MainActor in
+        HCCHealthKitUploader.shared.startIfEnabled()
+        #if DEBUG
+        await HCCHealthKitUploader.shared.debugRunLaunchHooksIfRequested()
+        #endif
+      }
+    }
   }
 
   var body: some Scene {

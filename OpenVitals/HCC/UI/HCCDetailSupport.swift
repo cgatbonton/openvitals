@@ -271,25 +271,49 @@ struct HCCScreen<Content: View>: View {
   @ViewBuilder let content: () -> Content
 
   var body: some View {
-    ScrollView {
-      // The mockup's `.card{margin-bottom:10px}`, expressed once as stack
-      // spacing rather than as a margin on each card. Stack spacing is the
-      // single mechanism for vertical rhythm on these screens: anything that
-      // needs a DIFFERENT gap (tiles and activity rows at 8) sets it on its own
-      // stack, and nothing adds a bottom padding that would stack on top of it.
-      VStack(alignment: .leading, spacing: 10) {
-        content()
+    ScrollViewReader { proxy in
+      ScrollView {
+        // The mockup's `.card{margin-bottom:10px}`, expressed once as stack
+        // spacing rather than as a margin on each card. Stack spacing is the
+        // single mechanism for vertical rhythm on these screens: anything that
+        // needs a DIFFERENT gap (tiles and activity rows at 8) sets it on its own
+        // stack, and nothing adds a bottom padding that would stack on top of it.
+        VStack(alignment: .leading, spacing: 10) {
+          content()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 18)
+        // DEBUG: `HCC_DEBUG_SCROLL_BOTTOM=1` scrolls every HCCScreen to its end a
+        // few seconds after it appears, so a screenshot can prove the last card
+        // clears the tab bar. The marker is a zero-height view; it costs nothing
+        // in Release, where the environment is never read.
+        Color.clear.frame(height: 0).id(HCCScreenEnd.id)
       }
-      .padding(.horizontal, 16)
-      .padding(.top, 12)
-      .padding(.bottom, 18)
+      .scrollIndicators(.hidden)
+      #if DEBUG
+      .task {
+        guard HCCScreenEnd.isRequested else { return }
+        try? await Task.sleep(for: .seconds(4))
+        withAnimation(nil) { proxy.scrollTo(HCCScreenEnd.id, anchor: .bottom) }
+      }
+      #endif
     }
-    .scrollIndicators(.hidden)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .hccBackground()
     .navigationBarBackButtonHidden(true)
     .toolbar(.hidden, for: .navigationBar)
   }
+}
+
+/// The end-of-content marker `HCCScreen` scrolls to under `HCC_DEBUG_SCROLL_BOTTOM`.
+enum HCCScreenEnd {
+  static let id = "hcc.screen.end"
+  #if DEBUG
+  static var isRequested: Bool {
+    ProcessInfo.processInfo.environment["HCC_DEBUG_SCROLL_BOTTOM"] == "1"
+  }
+  #endif
 }
 
 // ── Vitals ───────────────────────────────────────────────────────────────────

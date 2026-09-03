@@ -61,8 +61,10 @@
 	<string>OpenVitals uses Bluetooth to connect to your compatible user-owned BLE health device and read local device data.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>OpenVitals uses Bluetooth to connect to your compatible user-owned BLE health device and read local device data.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Development builds of OpenVitals write a small sample fixture into Apple Health to verify the Apple Watch upload path. The shipped app never asks to write to Health.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>OpenVitals reads Apple Health body mass only to prefill your local profile weight.</string>
+	<string>OpenVitals reads body mass to prefill your local profile. When you connect it to your own Health Command Center and turn on Apple Watch upload, it also reads the readings your Apple Watch recorded — heart-rate variability, resting and workout heart rate, breathing rate, blood oxygen, wrist temperature, VO2 max, steps, active energy, sleep stages and workouts — and uploads them to that server.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>OpenVitals uses background location to keep tracking outdoor workout routes, pace, and distance when you minimize the app.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
@@ -79,7 +81,17 @@
 	<array>
 		<string>bluetooth-central</string>
 		<string>location</string>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>remote-notification</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.gatbontontech.openvitals.hcc.healthkit-upload</string>
+		<string>com.gatbontontech.openvitals.hcc.refresh</string>
+	</array>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Command Center schedules the wake alarm you set from your sleep plan.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UILaunchScreen</key>

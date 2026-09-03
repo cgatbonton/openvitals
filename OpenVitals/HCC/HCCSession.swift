@@ -175,8 +175,15 @@ final class HCCSession: ObservableObject {
   /// to go back to reading a band over Bluetooth; redoing onboarding is.
   func signOut() async {
     if isSignedIn {
+      // HCC: forget this phone's APNs token BEFORE the bearer is deleted — the
+      // DELETE is authenticated with the very credential `clearCredentials()`
+      // is about to remove, and a token left behind would keep the server
+      // pushing this account's notifications at a signed-out phone.
+      await HCCPushRegistrar.shared.unregister(client: client)
       let _: HCCLogoutResponse? = try? await client.postBare("/api/auth/mobile/logout")
     }
+    // HCC: a Live Activity outlives the app, so it has to be ended explicitly.
+    HCCStrainLiveActivityController.shared.end()
     clearCredentials()
   }
 

@@ -186,7 +186,8 @@ struct HCCActivityDetailView: View {
     VStack(alignment: .leading, spacing: 8) {
       HCCLabel("Time in zones")
       if detail.zoneMin.contains(where: { $0 > 0 }) {
-        HCCZoneBars(minutes: detail.zoneMin)
+        // The server's six bins start with "below zone 1"; the bars are Z1–Z5.
+        HCCZoneBars(minutes: Array(detail.zoneMin.dropFirst()))
       } else {
         HCCEmptyNote("No zone minutes recorded for this activity.")
       }

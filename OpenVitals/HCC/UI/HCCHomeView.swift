@@ -73,7 +73,8 @@ struct HCCHomeView: View {
 
   /// Whether the live-activity surface exists in this build (Phase 4b). Flip to
   /// `true` and the "◉ Start activity" button returns to the row.
-  static let liveActivityIsAvailable = false
+  // HCC: it does — `HCCLiveSetupSheet` / `HCCLiveActivityView`.
+  static let liveActivityIsAvailable = true
 
   private var home: HCCHome? { store.hcc.homeByDate[dayKey] }
 
@@ -337,13 +338,12 @@ struct HCCHomeView: View {
         HCCEmptyNote("Loading this day's activities...")
       }
 
-      // Same rule as the Coach bubble: no control that does nothing. Live
-      // activity arrives in Phase 4b; until then "Add activity" has the row to
-      // itself and `liveActivityIsAvailable` is the one line that brings the
-      // second button back.
+      // Same rule as the Coach bubble: no control that does nothing.
+      // `liveActivityIsAvailable` is the one line that takes the second button
+      // away again if the live screen ever has to be pulled.
       HCCButtonRow(
         primary: Self.liveActivityIsAvailable
-          ? HCCButtonSpec(title: "◉ Start activity") { sheet = .comingSoon("Live activity") }
+          ? HCCButtonSpec(title: "◉ Start activity") { sheet = .live }
           : nil,
         secondary: HCCButtonSpec(title: "＋ Add activity") { sheet = .addActivity }
       )
@@ -761,6 +761,12 @@ extension HCCHomeView {
        let healthRoute = HealthRoute(rawValue: raw),
        let route = HCCHomeRoute(healthRoute: healthRoute, day: HealthDataStore.hccDayKey(selectedDate)) {
       path = [route]
+    }
+    // HCC: `HCC_DEBUG_OPEN_SHEET=live` presents the live workout's setup sheet.
+    // Home's sheets are otherwise only reachable by tapping, which `simctl`
+    // cannot do; the value is a `HCCHomeSheet.id`.
+    if environment["HCC_DEBUG_OPEN_SHEET"] == "live" {
+      sheet = .live
     }
     #endif
   }

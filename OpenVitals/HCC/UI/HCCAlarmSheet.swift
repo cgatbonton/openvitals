@@ -10,12 +10,16 @@ import SwiftUI
 //    promise, wrong the moment it is stored as UTC), so the wheel below is
 //    driven in UTC and read back as `HH:MM` — the device's own timezone never
 //    enters the arithmetic.
-//  * Nothing here schedules an alarm. AlarmKit is Phase 3; this row is the
-//    record of INTENT that both this app and the web app read, and the footer
-//    says so rather than letting the switch imply the phone will ring.
+//  * The row it saves is the record of INTENT that both this app and the web
+//    app read. Scheduling is a SEPARATE step, done by `HCCAlarmScheduler` after
+//    the save lands, and the status card below the form reports what this
+//    particular iPhone actually holds — including when the OS refused and a
+//    notification is standing in. The two are kept apart because the server row
+//    is true for the account and the schedule is true only for this handset.
 
 struct HCCAlarmSheet: View {
   @ObservedObject var store: HealthDataStore
+  @ObservedObject private var scheduler = HCCAlarmScheduler.shared
   @Environment(\.dismiss) private var dismiss
 
   @State private var minutesFromMidnight = 0
@@ -27,6 +31,9 @@ struct HCCAlarmSheet: View {
   @State private var isSaving = false
   @State private var errorText: String?
   @State private var didPrefill = false
+  #if DEBUG
+  @State private var debugStaysOpenAfterSave = false
+  #endif
 
   /// A reference day the wheel's `Date` proxy hangs off. Only its time of day
   /// is ever read back.
@@ -38,6 +45,7 @@ struct HCCAlarmSheet: View {
       HCCDetailHeader(title: "Alarm", subtitle: "Tonight")
       settingsCard
       bedtimeCard
+      scheduleCard
 
       if let errorText {
         HCCEmptyNote(errorText).hccCard()
@@ -48,10 +56,16 @@ struct HCCAlarmSheet: View {
         secondary: HCCButtonSpec(title: "Cancel", isEnabled: !isSaving) { dismiss() }
       )
 
-      HCCFootnote("The phone alarm is scheduled once the alarm feature ships. For now this saves the wake time your Command Center reasons about.")
+      HCCFootnote("Saving writes the wake time your Command Center reasons about, then schedules it on this iPhone.")
         .padding(.top, 10)
     }
-    .onAppear(perform: prefillIfNeeded)
+    .onAppear {
+      // The scheduler follows the store for the life of the process; opening
+      // this sheet is one more place that guarantees it has started, so the
+      // status card below is never blank just because More was skipped.
+      HCCAlarmScheduler.shared.observe(store)
+      prefillIfNeeded()
+    }
     // The alarm may still be in flight when this sheet opens. `didPrefill` is
     // only set once a row actually arrives, so this fills the fields the moment
     // it does — and never overwrites an edit in progress.
@@ -177,6 +191,33 @@ struct HCCAlarmSheet: View {
     return "Aims for 100% of need; the alarm shifts inside the window."
   }
 
+  // ── This iPhone ────────────────────────────────────────────────────────────
+
+  /// What the OS is actually holding, which is not the same claim as the row
+  /// above it. The server row can say 6:30 while this phone has nothing armed —
+  /// alarms refused in Settings, or a save that has not been made yet — and the
+  /// only honest screen is one that shows both.
+  private var scheduleCard: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HCCLabel("On this iPhone")
+      Text(scheduler.statusLine)
+        .font(HCCTheme.Font.body(size: 13.5))
+        .foregroundStyle(HCCTheme.Color.text)
+        .fixedSize(horizontal: false, vertical: true)
+      if let note = scheduler.statusNote {
+        Text(note)
+          .font(HCCTheme.Font.body(size: 11.5))
+          .foregroundStyle(HCCTheme.Color.muted)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      if isDirty {
+        HCCFootnote("Unsaved edits are not scheduled yet.")
+          .padding(.top, 4)
+      }
+    }
+    .hccCard()
+  }
+
   // ── State ──────────────────────────────────────────────────────────────────
 
   private var stored: HCCAlarm? { store.hcc.alarm }
@@ -216,6 +257,10 @@ struct HCCAlarmSheet: View {
     guard ProcessInfo.processInfo.environment["HCC_DEBUG_SAVE"] == "1" else { return }
     minutesFromMidnight += 5
     mode = mode == "exact" ? "goal" : "exact"
+    // Stay open so the schedule card can be screenshotted: dismissing on save
+    // is right for a person and useless for a verification run, which needs to
+    // see what the scheduler did with the row that was just written.
+    debugStaysOpenAfterSave = true
     save()
   }
   #endif
@@ -228,6 +273,18 @@ struct HCCAlarmSheet: View {
     Task {
       if await store.saveAlarm(alarm) {
         isSaving = false
+        // The server is the authority on the row; the phone is the authority on
+        // whether it will ring. Scheduling from the value that was just ACCEPTED
+        // — and from the sleep plan `saveAlarm` re-read alongside it — is what
+        // keeps the two from drifting.
+        HCCAlarmScheduler.shared.apply(
+          alarm: store.hcc.alarm ?? alarm,
+          sleepPlan: store.hcc.sleepPlan,
+          force: true
+        )
+        #if DEBUG
+        if debugStaysOpenAfterSave { return }
+        #endif
         dismiss()
         return
       }

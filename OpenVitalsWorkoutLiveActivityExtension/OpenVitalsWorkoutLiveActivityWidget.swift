@@ -7,6 +7,14 @@ import WidgetKit
 struct OpenVitalsWorkoutLiveActivityBundle: WidgetBundle {
   var body: some Widget {
     OpenVitalsWorkoutLiveActivityWidget()
+    // HCC: the Command Center home/lock-screen widgets and the strain Live
+    // Activity. They read `summary.json` from the shared App Group container —
+    // see OpenVitalsWorkoutLiveActivityExtension/HCC/.
+    HCCHomeWidget()
+    HCCRecoveryGaugeWidget()
+    HCCScoresRectangularWidget()
+    // HCC: today's strain against today's target.
+    HCCStrainLiveActivityWidget()
   }
 }
 
