@@ -520,6 +520,12 @@ struct StrainV2OverviewPage: View {
       }
     }
     .navigationTitle("Strain")
+    // HCC: see the same hook on the Sleep and Recovery pages — a detail screen
+    // reached directly must fetch its own day rather than show an empty one.
+    .task(id: selectedDate) {
+      guard HCCProviderSettings.isCloud else { return }
+      await store.refreshFromHCC(date: selectedDate)
+    }
     .navigationBarTitleDisplayMode(.inline)
     .toolbarBackground(.hidden, for: .navigationBar)
     .toolbar {
@@ -556,7 +562,9 @@ struct StrainV2OverviewPage: View {
   private var dateLabel: String {
     let suffix = selectedDate.formatted(.dateTime.day().month(.abbreviated))
     let prefix = ScoreDateTimeline.dateLabel(for: selectedDate)
-    return "\(prefix), \(suffix)"
+    // "Today, Sep 2" reads well; "Aug 25, Aug 25" does not. Past days already
+    // label themselves with the date, so there is no relative word to prepend.
+    return prefix == suffix ? suffix : "\(prefix), \(suffix)"
   }
 
   private var coachTip: CoachInlineTip {

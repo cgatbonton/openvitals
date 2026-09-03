@@ -566,6 +566,10 @@ extension HealthDataStore {
     for date: Date = Date(),
     calendar: Calendar = .current
   ) -> String {
+    // HCC: the Command Center's own vitals stream answers this in cloud mode.
+    if HCCProviderSettings.isCloud {
+      return hccVitalDisplayText(slug: "hrv_sdnn")
+    }
     guard !usesPreviewPacketData else {
       return "--"
     }
@@ -610,6 +614,10 @@ extension HealthDataStore {
   }
 
   func recoveryRestingHRDisplayText(for date: Date = Date(), calendar: Calendar = .current) -> String {
+    // HCC: see recoveryHRVDisplayText.
+    if HCCProviderSettings.isCloud {
+      return hccVitalDisplayText(slug: "resting_hr")
+    }
     guard !usesPreviewPacketData else {
       return "--"
     }
@@ -690,6 +698,10 @@ extension HealthDataStore {
     for date: Date = Date(),
     calendar: Calendar = .current
   ) -> String {
+    // HCC: see recoveryHRVDisplayText.
+    if HCCProviderSettings.isCloud {
+      return hccVitalDisplayText(slug: "respiratory_rate")
+    }
     guard !usesPreviewPacketData else {
       return "--"
     }
@@ -733,6 +745,10 @@ extension HealthDataStore {
     for date: Date = Date(),
     calendar: Calendar = .current
   ) -> String {
+    // HCC: see recoveryHRVDisplayText.
+    if HCCProviderSettings.isCloud {
+      return hccVitalDisplayText(slug: "wrist_temp")
+    }
     guard !usesPreviewPacketData else {
       return "--"
     }
@@ -755,6 +771,10 @@ extension HealthDataStore {
     for date: Date = Date(),
     calendar: Calendar = .current
   ) -> String {
+    // HCC: see recoveryHRVDisplayText.
+    if HCCProviderSettings.isCloud {
+      return hccVitalDisplayText(slug: "blood_oxygen")
+    }
     guard !usesPreviewPacketData else {
       return "--"
     }

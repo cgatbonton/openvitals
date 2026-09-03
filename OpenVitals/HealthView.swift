@@ -20,6 +20,9 @@ struct HealthView: View {
         )
 
         HealthActivityOverviewSection(
+          // HCC: the heart-rate card reads the live BLE stream, which cloud
+          // mode never opens.
+          showsLiveHeartRate: !HCCProviderSettings.isCloud,
           steps: store.healthDashboardStepsText,
           activeEnergy: store.healthDashboardActiveEnergyText,
           stepsFreshness: store.healthDashboardStepsStatus,
@@ -38,10 +41,14 @@ struct HealthView: View {
           snapshots: store.healthDashboardExploreSnapshots
         )
 
-        HealthRouteShortcutSection(
-          title: "Data & Algorithms",
-          snapshots: store.healthDashboardAlgorithmSnapshots
-        )
+        // HCC: empty in cloud mode — there is no local packet pipeline to
+        // inspect, so the section is not drawn at all.
+        if !store.healthDashboardAlgorithmSnapshots.isEmpty {
+          HealthRouteShortcutSection(
+            title: "Data & Algorithms",
+            snapshots: store.healthDashboardAlgorithmSnapshots
+          )
+        }
       }
       .padding(.horizontal, 16)
       .padding(.vertical, 18)
@@ -73,7 +80,10 @@ struct HealthView: View {
       store.refreshHealthDashboardSnapshots()
       store.loadBridgeCatalogsIfNeeded()
       store.loadPersistedPacketScoresIfNeeded()
-      store.refreshHeartRateTimeline()
+      // HCC: the heart-rate timeline is a local BLE sample-store read.
+      if !HCCProviderSettings.isCloud {
+        store.refreshHeartRateTimeline()
+      }
     }
   }
 

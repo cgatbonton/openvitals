@@ -158,6 +158,10 @@ enum OpenVitalsTheme {
       champagne
     case .local:
       gold
+    // HCC: distinct from the on-device kinds so a cloud-scored row reads as
+    // one at a glance.
+    case .cloud:
+      bronze
     case .unavailable:
       textTertiary
     }

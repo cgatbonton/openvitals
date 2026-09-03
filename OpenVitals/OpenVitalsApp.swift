@@ -9,6 +9,13 @@ struct OpenVitalsApp: App {
 
   init() {
     OpenVitalsTheme.configureAppearance()
+    // HCC: DEBUG-only. When the process is launched with HCC_DEBUG_TOKEN the
+    // session signs itself in from the environment, so simulator verification
+    // never types a password into the UI. Compiled out of Release; no-op
+    // without the variable. See docs/hcc-provider.md.
+    #if DEBUG
+    HCCSession.bootstrapForDebugLaunchIfNeeded()
+    #endif
   }
 
   var body: some Scene {

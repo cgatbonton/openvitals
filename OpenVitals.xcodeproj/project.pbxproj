@@ -151,6 +151,49 @@
 		D10000000000000000000056 /* OpenVitalsRRReferenceCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000056 /* OpenVitalsRRReferenceCapture.swift */; };
 		D10000000000000000000057 /* MobileCaptureStreamQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000057 /* MobileCaptureStreamQueue.swift */; };
 		D10000000000000000000058 /* OpenVitalsAppModel+MobileCaptureStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000058 /* OpenVitalsAppModel+MobileCaptureStream.swift */; };
+		E10000000000000000000101 /* HCCProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000101 /* HCCProvider.swift */; };
+		E10000000000000000000201 /* HealthDataStore+HCC.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000201 /* HealthDataStore+HCC.swift */; };
+		E10000000000000000000102 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000102 /* KeychainStore.swift */; };
+		E10000000000000000000103 /* HCCModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000103 /* HCCModels.swift */; };
+		E10000000000000000000104 /* HCCAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000104 /* HCCAPIClient.swift */; };
+		E10000000000000000000105 /* HCCSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000105 /* HCCSession.swift */; };
+		E10000000000000000000106 /* HCCSignInScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000106 /* HCCSignInScreen.swift */; };
+		E10000000000000000000301 /* OnboardingProviderStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000301 /* OnboardingProviderStep.swift */; };
+		E10000000000000000000302 /* OnboardingHCCConsentStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000302 /* OnboardingHCCConsentStep.swift */; };
+		E10000000000000000000303 /* HCCMoreSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000303 /* HCCMoreSection.swift */; };
+		E10000000000000000000401 /* HCCTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000401 /* HCCTheme.swift */; };
+		E10000000000000000000402 /* HCCRing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000402 /* HCCRing.swift */; };
+		E10000000000000000000403 /* HCCComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000403 /* HCCComponents.swift */; };
+		E10000000000000000000404 /* HCCPreviewHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000404 /* HCCPreviewHost.swift */; };
+		E10000000000000000000410 /* Outfit-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000410 /* Outfit-Variable.ttf */; };
+		E10000000000000000000411 /* IBMPlexSans-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000411 /* IBMPlexSans-Variable.ttf */; };
+		E10000000000000000000412 /* IBMPlexMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000412 /* IBMPlexMono-Regular.ttf */; };
+		E10000000000000000000413 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000413 /* IBMPlexMono-Medium.ttf */; };
+		E10000000000000000000414 /* OFL-Outfit.txt in Resources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000414 /* OFL-Outfit.txt */; };
+		E10000000000000000000415 /* OFL-IBMPlexSans.txt in Resources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000415 /* OFL-IBMPlexSans.txt */; };
+		E10000000000000000000416 /* OFL-IBMPlexMono.txt in Resources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000416 /* OFL-IBMPlexMono.txt */; };
+		E1000000000000000000701 /* HCCSheetChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000701 /* HCCSheetChrome.swift */; };
+		E1000000000000000000702 /* HCCActivityDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000702 /* HCCActivityDetailView.swift */; };
+		E1000000000000000000703 /* HCCAddActivitySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000703 /* HCCAddActivitySheet.swift */; };
+		E1000000000000000000704 /* HCCAlarmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000704 /* HCCAlarmSheet.swift */; };
+		E1000000000000000000705 /* HCCDevicesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000705 /* HCCDevicesSheet.swift */; };
+		E1000000000000000000706 /* HCCCustomizeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000706 /* HCCCustomizeSheet.swift */; };
+		E10000000000000000000601 /* HCCDetailHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000601 /* HCCDetailHeader.swift */; };
+		E10000000000000000000602 /* HCCDetailSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000602 /* HCCDetailSupport.swift */; };
+		E10000000000000000000603 /* HCCRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000603 /* HCCRecoveryView.swift */; };
+		E10000000000000000000604 /* HCCSleepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000604 /* HCCSleepView.swift */; };
+		E10000000000000000000605 /* HCCStrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000605 /* HCCStrainView.swift */; };
+		E10000000000000000000606 /* HCCHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000606 /* HCCHealthView.swift */; };
+		E10000000000000000000607 /* HCCBiomarkersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000607 /* HCCBiomarkersView.swift */; };
+		E10000000000000000000608 /* HCCInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000608 /* HCCInsightsView.swift */; };
+		E10000000000000000000609 /* HCCGeneticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000609 /* HCCGeneticsView.swift */; };
+		E10000000000000000000610 /* HCCProtocolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000610 /* HCCProtocolsView.swift */; };
+		E100000000000000000000501 /* HCCHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E200000000000000000000501 /* HCCHomeView.swift */; };
+		E100000000000000000000502 /* HCCHomeSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = E200000000000000000000502 /* HCCHomeSections.swift */; };
+		E100000000000000000000503 /* HCCStrainRecoveryChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = E200000000000000000000503 /* HCCStrainRecoveryChart.swift */; };
+		E100000000000000000000504 /* HCCTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = E200000000000000000000504 /* HCCTabBar.swift */; };
+		E100000000000000000000505 /* HCCCoachFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = E200000000000000000000505 /* HCCCoachFAB.swift */; };
+		E100000000000000000000506 /* HCCHomeRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E200000000000000000000506 /* HCCHomeRouter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -327,6 +370,49 @@
 		D20000000000000000000056 /* OpenVitalsRRReferenceCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenVitalsRRReferenceCapture.swift; sourceTree = "<group>"; };
 		D20000000000000000000057 /* MobileCaptureStreamQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileCaptureStreamQueue.swift; sourceTree = "<group>"; };
 		D20000000000000000000058 /* OpenVitalsAppModel+MobileCaptureStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OpenVitalsAppModel+MobileCaptureStream.swift"; sourceTree = "<group>"; };
+		E20000000000000000000101 /* HCCProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCProvider.swift; sourceTree = "<group>"; };
+		E20000000000000000000201 /* HealthDataStore+HCC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthDataStore+HCC.swift"; sourceTree = "<group>"; };
+		E20000000000000000000102 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		E20000000000000000000103 /* HCCModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCModels.swift; sourceTree = "<group>"; };
+		E20000000000000000000104 /* HCCAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCAPIClient.swift; sourceTree = "<group>"; };
+		E20000000000000000000105 /* HCCSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCSession.swift; sourceTree = "<group>"; };
+		E20000000000000000000106 /* HCCSignInScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCSignInScreen.swift; sourceTree = "<group>"; };
+		E20000000000000000000301 /* OnboardingProviderStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingProviderStep.swift; sourceTree = "<group>"; };
+		E20000000000000000000302 /* OnboardingHCCConsentStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingHCCConsentStep.swift; sourceTree = "<group>"; };
+		E20000000000000000000303 /* HCCMoreSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCMoreSection.swift; sourceTree = "<group>"; };
+		E20000000000000000000401 /* HCCTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCTheme.swift; sourceTree = "<group>"; };
+		E20000000000000000000402 /* HCCRing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCRing.swift; sourceTree = "<group>"; };
+		E20000000000000000000403 /* HCCComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCComponents.swift; sourceTree = "<group>"; };
+		E20000000000000000000404 /* HCCPreviewHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCPreviewHost.swift; sourceTree = "<group>"; };
+		E20000000000000000000410 /* Outfit-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Outfit-Variable.ttf"; sourceTree = "<group>"; };
+		E20000000000000000000411 /* IBMPlexSans-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSans-Variable.ttf"; sourceTree = "<group>"; };
+		E20000000000000000000412 /* IBMPlexMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Regular.ttf"; sourceTree = "<group>"; };
+		E20000000000000000000413 /* IBMPlexMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Medium.ttf"; sourceTree = "<group>"; };
+		E20000000000000000000414 /* OFL-Outfit.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-Outfit.txt"; sourceTree = "<group>"; };
+		E20000000000000000000415 /* OFL-IBMPlexSans.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-IBMPlexSans.txt"; sourceTree = "<group>"; };
+		E20000000000000000000416 /* OFL-IBMPlexMono.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-IBMPlexMono.txt"; sourceTree = "<group>"; };
+		E2000000000000000000701 /* HCCSheetChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCSheetChrome.swift; sourceTree = "<group>"; };
+		E2000000000000000000702 /* HCCActivityDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCActivityDetailView.swift; sourceTree = "<group>"; };
+		E2000000000000000000703 /* HCCAddActivitySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCAddActivitySheet.swift; sourceTree = "<group>"; };
+		E2000000000000000000704 /* HCCAlarmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCAlarmSheet.swift; sourceTree = "<group>"; };
+		E2000000000000000000705 /* HCCDevicesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCDevicesSheet.swift; sourceTree = "<group>"; };
+		E2000000000000000000706 /* HCCCustomizeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCCustomizeSheet.swift; sourceTree = "<group>"; };
+		E20000000000000000000601 /* HCCDetailHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCDetailHeader.swift; sourceTree = "<group>"; };
+		E20000000000000000000602 /* HCCDetailSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCDetailSupport.swift; sourceTree = "<group>"; };
+		E20000000000000000000603 /* HCCRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCRecoveryView.swift; sourceTree = "<group>"; };
+		E20000000000000000000604 /* HCCSleepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCSleepView.swift; sourceTree = "<group>"; };
+		E20000000000000000000605 /* HCCStrainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCStrainView.swift; sourceTree = "<group>"; };
+		E20000000000000000000606 /* HCCHealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCHealthView.swift; sourceTree = "<group>"; };
+		E20000000000000000000607 /* HCCBiomarkersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCBiomarkersView.swift; sourceTree = "<group>"; };
+		E20000000000000000000608 /* HCCInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCInsightsView.swift; sourceTree = "<group>"; };
+		E20000000000000000000609 /* HCCGeneticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCGeneticsView.swift; sourceTree = "<group>"; };
+		E20000000000000000000610 /* HCCProtocolsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCProtocolsView.swift; sourceTree = "<group>"; };
+		E200000000000000000000501 /* HCCHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCHomeView.swift; sourceTree = "<group>"; };
+		E200000000000000000000502 /* HCCHomeSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCHomeSections.swift; sourceTree = "<group>"; };
+		E200000000000000000000503 /* HCCStrainRecoveryChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCStrainRecoveryChart.swift; sourceTree = "<group>"; };
+		E200000000000000000000504 /* HCCTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCTabBar.swift; sourceTree = "<group>"; };
+		E200000000000000000000505 /* HCCCoachFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCCoachFAB.swift; sourceTree = "<group>"; };
+		E200000000000000000000506 /* HCCHomeRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCHomeRouter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -501,6 +587,7 @@
 				D20000000000000000000037 /* OpenVitalsBLEClient+Parsing.swift */,
 				D20000000000000000000038 /* OpenVitalsBLEClient+CentralDelegate.swift */,
 				D20000000000000000000039 /* OpenVitalsBLEClient+PeripheralDelegate.swift */,
+				E40000000000000000000101 /* HCC */,
 				A2000000000000000000000B /* OpenVitals-Bridging-Header.h */,
 				A2000000000000000000000A /* Info.plist */,
 				A20000000000000000000017 /* OpenVitals.entitlements */,
@@ -544,6 +631,72 @@
 				B20000000000000000000005 /* Info.plist */,
 			);
 			path = OpenVitalsWorkoutLiveActivityExtension;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000101 /* HCC */ = {
+			isa = PBXGroup;
+			children = (
+				E20000000000000000000101 /* HCCProvider.swift */,
+				E20000000000000000000102 /* KeychainStore.swift */,
+				E20000000000000000000103 /* HCCModels.swift */,
+				E20000000000000000000104 /* HCCAPIClient.swift */,
+				E20000000000000000000105 /* HCCSession.swift */,
+				E20000000000000000000106 /* HCCSignInScreen.swift */,
+				E20000000000000000000201 /* HealthDataStore+HCC.swift */,
+				E20000000000000000000301 /* OnboardingProviderStep.swift */,
+				E20000000000000000000302 /* OnboardingHCCConsentStep.swift */,
+				E20000000000000000000303 /* HCCMoreSection.swift */,
+				E40000000000000000000102 /* UI */,
+				E40000000000000000000103 /* Fonts */,
+			);
+			path = HCC;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000102 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				E20000000000000000000401 /* HCCTheme.swift */,
+				E20000000000000000000402 /* HCCRing.swift */,
+				E20000000000000000000403 /* HCCComponents.swift */,
+				E20000000000000000000404 /* HCCPreviewHost.swift */,
+				E2000000000000000000701 /* HCCSheetChrome.swift */,
+				E2000000000000000000702 /* HCCActivityDetailView.swift */,
+				E2000000000000000000703 /* HCCAddActivitySheet.swift */,
+				E2000000000000000000704 /* HCCAlarmSheet.swift */,
+				E2000000000000000000705 /* HCCDevicesSheet.swift */,
+				E2000000000000000000706 /* HCCCustomizeSheet.swift */,
+				E20000000000000000000601 /* HCCDetailHeader.swift */,
+				E20000000000000000000602 /* HCCDetailSupport.swift */,
+				E20000000000000000000603 /* HCCRecoveryView.swift */,
+				E20000000000000000000604 /* HCCSleepView.swift */,
+				E20000000000000000000605 /* HCCStrainView.swift */,
+				E20000000000000000000606 /* HCCHealthView.swift */,
+				E20000000000000000000607 /* HCCBiomarkersView.swift */,
+				E20000000000000000000608 /* HCCInsightsView.swift */,
+				E20000000000000000000609 /* HCCGeneticsView.swift */,
+				E20000000000000000000610 /* HCCProtocolsView.swift */,
+				E200000000000000000000501 /* HCCHomeView.swift */,
+				E200000000000000000000502 /* HCCHomeSections.swift */,
+				E200000000000000000000503 /* HCCStrainRecoveryChart.swift */,
+				E200000000000000000000504 /* HCCTabBar.swift */,
+				E200000000000000000000505 /* HCCCoachFAB.swift */,
+				E200000000000000000000506 /* HCCHomeRouter.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		E40000000000000000000103 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				E20000000000000000000410 /* Outfit-Variable.ttf */,
+				E20000000000000000000411 /* IBMPlexSans-Variable.ttf */,
+				E20000000000000000000412 /* IBMPlexMono-Regular.ttf */,
+				E20000000000000000000413 /* IBMPlexMono-Medium.ttf */,
+				E20000000000000000000414 /* OFL-Outfit.txt */,
+				E20000000000000000000415 /* OFL-IBMPlexSans.txt */,
+				E20000000000000000000416 /* OFL-IBMPlexMono.txt */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -634,6 +787,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000000000000000000000B /* Assets.xcassets in Resources */,
+				E10000000000000000000410 /* Outfit-Variable.ttf in Resources */,
+				E10000000000000000000411 /* IBMPlexSans-Variable.ttf in Resources */,
+				E10000000000000000000412 /* IBMPlexMono-Regular.ttf in Resources */,
+				E10000000000000000000413 /* IBMPlexMono-Medium.ttf in Resources */,
+				E10000000000000000000414 /* OFL-Outfit.txt in Resources */,
+				E10000000000000000000415 /* OFL-IBMPlexSans.txt in Resources */,
+				E10000000000000000000416 /* OFL-IBMPlexMono.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -811,6 +971,42 @@
 				D10000000000000000000037 /* OpenVitalsBLEClient+Parsing.swift in Sources */,
 				D10000000000000000000038 /* OpenVitalsBLEClient+CentralDelegate.swift in Sources */,
 				D10000000000000000000039 /* OpenVitalsBLEClient+PeripheralDelegate.swift in Sources */,
+				E10000000000000000000101 /* HCCProvider.swift in Sources */,
+				E10000000000000000000102 /* KeychainStore.swift in Sources */,
+				E10000000000000000000103 /* HCCModels.swift in Sources */,
+				E10000000000000000000104 /* HCCAPIClient.swift in Sources */,
+				E10000000000000000000105 /* HCCSession.swift in Sources */,
+				E10000000000000000000106 /* HCCSignInScreen.swift in Sources */,
+				E10000000000000000000201 /* HealthDataStore+HCC.swift in Sources */,
+				E10000000000000000000301 /* OnboardingProviderStep.swift in Sources */,
+				E10000000000000000000302 /* OnboardingHCCConsentStep.swift in Sources */,
+				E10000000000000000000303 /* HCCMoreSection.swift in Sources */,
+				E10000000000000000000401 /* HCCTheme.swift in Sources */,
+				E10000000000000000000402 /* HCCRing.swift in Sources */,
+				E10000000000000000000403 /* HCCComponents.swift in Sources */,
+				E10000000000000000000404 /* HCCPreviewHost.swift in Sources */,
+				E1000000000000000000701 /* HCCSheetChrome.swift in Sources */,
+				E1000000000000000000702 /* HCCActivityDetailView.swift in Sources */,
+				E1000000000000000000703 /* HCCAddActivitySheet.swift in Sources */,
+				E1000000000000000000704 /* HCCAlarmSheet.swift in Sources */,
+				E1000000000000000000705 /* HCCDevicesSheet.swift in Sources */,
+				E1000000000000000000706 /* HCCCustomizeSheet.swift in Sources */,
+				E10000000000000000000601 /* HCCDetailHeader.swift in Sources */,
+				E10000000000000000000602 /* HCCDetailSupport.swift in Sources */,
+				E10000000000000000000603 /* HCCRecoveryView.swift in Sources */,
+				E10000000000000000000604 /* HCCSleepView.swift in Sources */,
+				E10000000000000000000605 /* HCCStrainView.swift in Sources */,
+				E10000000000000000000606 /* HCCHealthView.swift in Sources */,
+				E10000000000000000000607 /* HCCBiomarkersView.swift in Sources */,
+				E10000000000000000000608 /* HCCInsightsView.swift in Sources */,
+				E10000000000000000000609 /* HCCGeneticsView.swift in Sources */,
+				E10000000000000000000610 /* HCCProtocolsView.swift in Sources */,
+				E100000000000000000000501 /* HCCHomeView.swift in Sources */,
+				E100000000000000000000502 /* HCCHomeSections.swift in Sources */,
+				E100000000000000000000503 /* HCCStrainRecoveryChart.swift in Sources */,
+				E100000000000000000000504 /* HCCTabBar.swift in Sources */,
+				E100000000000000000000505 /* HCCCoachFAB.swift in Sources */,
+				E100000000000000000000506 /* HCCHomeRouter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -115,6 +115,9 @@ struct HealthTodayFocusCard: View {
 }
 
 struct HealthActivityOverviewSection: View {
+  // HCC: false hides the live heart-rate card for providers that have no BLE
+  // stream behind it. Defaulted so every existing call site is unchanged.
+  var showsLiveHeartRate: Bool = true
   let steps: String
   let activeEnergy: String
   let stepsFreshness: String
@@ -157,17 +160,19 @@ struct HealthActivityOverviewSection: View {
         }
         .buttonStyle(.plain)
 
-        NavigationLink(value: HealthRoute.healthMonitor) {
-          HealthDashboardMetricCard(
-            title: "Heart Rate",
-            value: heartRateValue,
-            subtitle: heartRateStatus,
-            systemImage: "heart.fill",
-            tint: OpenVitalsTheme.bronze,
-            source: heartRateSource
-          )
+        if showsLiveHeartRate {
+          NavigationLink(value: HealthRoute.healthMonitor) {
+            HealthDashboardMetricCard(
+              title: "Heart Rate",
+              value: heartRateValue,
+              subtitle: heartRateStatus,
+              systemImage: "heart.fill",
+              tint: OpenVitalsTheme.bronze,
+              source: heartRateSource
+            )
+          }
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
       }
     }
   }
@@ -522,29 +527,48 @@ struct HealthMonitorView: View {
           }
         }
 
-        let cardioLoadSnapshot = store.snapshot(for: .cardioLoad)
-        NavigationLink(value: HealthRoute.cardioLoad) {
-          HealthWideRouteCard(
-            title: cardioLoadSnapshot.title,
-            value: cardioLoadSnapshot.displayValue,
-            status: cardioLoadSnapshot.status,
-            systemImage: cardioLoadSnapshot.systemImage,
-            tint: cardioLoadSnapshot.tint,
-            source: cardioLoadSnapshot.source
-          )
+        // HCC: cardio load is computed from local activity sessions, which
+        // cloud mode never records; the card could only ever be empty.
+        if !HCCProviderSettings.isCloud {
+          let cardioLoadSnapshot = store.snapshot(for: .cardioLoad)
+          NavigationLink(value: HealthRoute.cardioLoad) {
+            HealthWideRouteCard(
+              title: cardioLoadSnapshot.title,
+              value: cardioLoadSnapshot.displayValue,
+              status: cardioLoadSnapshot.status,
+              systemImage: cardioLoadSnapshot.systemImage,
+              tint: cardioLoadSnapshot.tint,
+              source: cardioLoadSnapshot.source
+            )
+          }
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
 
         HealthSectionTitle("Timeline")
         VStack(spacing: 8) {
           if let sleep = store.primarySleep() {
             HealthInfoRow(row: HealthSummaryRow("Primary sleep", value: "\(sleep.startLabel) - \(sleep.endLabel) | \(sleep.durationText) | \(sleep.scoreDisplayText)", source: sleep.source, systemImage: "bed.double"))
           } else {
-            HealthInfoRow(row: HealthSummaryRow("Primary sleep", value: "No band sleep data", source: .unavailable("band sleep import not available"), systemImage: "bed.double"))
+            // HCC: say which side has nothing, rather than blaming a band sync
+            // that cloud mode never runs.
+            HealthInfoRow(row: HealthSummaryRow(
+              "Primary sleep",
+              value: HCCProviderSettings.isCloud ? "No night on record for this day" : "No band sleep data",
+              source: .unavailable(
+                HCCProviderSettings.isCloud
+                  ? "Command Center has no sleep for this day"
+                  : "band sleep import not available"
+              ),
+              systemImage: "bed.double"
+            ))
           }
-          HealthInfoRow(row: HealthSummaryRow("Heart rate 1D", value: store.heartRateTimelineStatus, source: store.heartRateHourlyRanges.isEmpty ? .unavailable("BLE heart-rate sample store") : .live("BLE heart-rate sample store"), systemImage: "heart"))
-          ForEach(store.heartRateHourlyTimelineRows()) { row in
-            HealthInfoRow(row: row)
+          // HCC: the intraday heart-rate timeline is the local BLE sample
+          // store, which cloud mode does not fill.
+          if !HCCProviderSettings.isCloud {
+            HealthInfoRow(row: HealthSummaryRow("Heart rate 1D", value: store.heartRateTimelineStatus, source: store.heartRateHourlyRanges.isEmpty ? .unavailable("BLE heart-rate sample store") : .live("BLE heart-rate sample store"), systemImage: "heart"))
+            ForEach(store.heartRateHourlyTimelineRows()) { row in
+              HealthInfoRow(row: row)
+            }
           }
         }
 
@@ -569,11 +593,17 @@ struct HealthMonitorView: View {
     .navigationTitle("Health Monitor")
     .task {
       let date = selectedDate?.wrappedValue ?? Date()
-      store.refreshHeartRateTimeline(for: date)
-      store.refreshPacketInputsIfNeeded(for: date)
+      // HCC: both reads below are local-store reads.
+      if !HCCProviderSettings.isCloud {
+        store.refreshHeartRateTimeline(for: date)
+        store.refreshPacketInputsIfNeeded(for: date)
+      }
     }
     .onChange(of: selectedDate?.wrappedValue) { _, newValue in
       guard let newValue else {
+        return
+      }
+      guard !HCCProviderSettings.isCloud else {
         return
       }
       store.refreshHeartRateTimeline(for: newValue)

@@ -4,6 +4,11 @@ import Foundation
 import UserNotifications
 
 enum OnboardingStep: Int, CaseIterable {
+  // HCC: the provider choice leads the flow, and cloud mode adds two steps of
+  // its own. Raw values no longer describe the order — `OnboardingFlow` does.
+  case provider
+  case hccConsent
+  case hccSignIn
   case healthKit
   case location
   case bluetooth
@@ -13,6 +18,13 @@ enum OnboardingStep: Int, CaseIterable {
 
   var title: String {
     switch self {
+    // HCC:
+    case .provider:
+      return "Choose your source"
+    case .hccConsent:
+      return "What gets sent"
+    case .hccSignIn:
+      return "Sign in"
     case .healthKit:
       return "Import Weight"
     case .location:
@@ -28,20 +40,62 @@ enum OnboardingStep: Int, CaseIterable {
     }
   }
 
-  var progress: Double {
-    Double(rawValue + 1) / Double(Self.allCases.count)
+}
+
+// HCC: order used to be `OnboardingStep`'s raw-value arithmetic, which can
+// describe exactly one flow. There are two now, so the order is written out and
+// everything derived from it — progress, the "Step n of m" label, next and
+// previous — reads the list rather than doing sums on case numbers.
+/// The ordered screens of onboarding for one provider.
+struct OnboardingFlow {
+  let steps: [OnboardingStep]
+
+  /// The bridge path is upstream's sequence untouched, behind the one new
+  /// choice screen; the cloud path drops the steps that only make sense for a
+  /// Bluetooth device and adds consent and sign-in.
+  static func forProvider(_ provider: HealthMetricProvider) -> OnboardingFlow {
+    switch provider {
+    case .bridge:
+      OnboardingFlow(steps: [.provider, .healthKit, .location, .bluetooth, .notifications, .connect, .profile])
+    case .hccCloud:
+      OnboardingFlow(steps: [.provider, .hccConsent, .hccSignIn, .healthKit, .notifications, .profile])
+    }
   }
 
-  var stepLabel: String {
-    "Step \(rawValue + 1) of \(Self.allCases.count)"
+  func contains(_ step: OnboardingStep) -> Bool {
+    steps.contains(step)
   }
 
-  var next: OnboardingStep? {
-    Self(rawValue: rawValue + 1)
+  func next(after step: OnboardingStep) -> OnboardingStep? {
+    guard let index = steps.firstIndex(of: step), index + 1 < steps.count else {
+      return nil
+    }
+    return steps[index + 1]
   }
 
-  var previous: OnboardingStep? {
-    Self(rawValue: rawValue - 1)
+  func previous(before step: OnboardingStep) -> OnboardingStep? {
+    guard let index = steps.firstIndex(of: step), index > 0 else {
+      return nil
+    }
+    return steps[index - 1]
+  }
+
+  func progress(at step: OnboardingStep) -> Double {
+    guard !steps.isEmpty else {
+      return 1
+    }
+    return Double(position(of: step)) / Double(steps.count)
+  }
+
+  func stepLabel(at step: OnboardingStep) -> String {
+    "Step \(position(of: step)) of \(steps.count)"
+  }
+
+  /// 1-based place in the flow. A step the current path does not contain — the
+  /// instant between picking a provider and moving into its path — reads as the
+  /// first, which is where the user is standing.
+  private func position(of step: OnboardingStep) -> Int {
+    (steps.firstIndex(of: step) ?? 0) + 1
   }
 }
 

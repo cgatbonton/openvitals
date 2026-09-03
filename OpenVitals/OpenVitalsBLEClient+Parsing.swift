@@ -442,7 +442,7 @@ extension OpenVitalsBLEClient {
         CBATTError.Code.insufficientEncryptionKeySize.rawValue,
       ]
       if authErrorCodes.contains(nsError.code) {
-        return "Command writes need an authenticated BLE link. Disconnect other WHOOP clients, then reset/reconnect and accept any iOS pairing prompt."
+        return "Command writes need an authenticated BLE link. Disconnect other clients, then reset/reconnect and accept any iOS pairing prompt."
       }
     }
 
@@ -451,7 +451,7 @@ extension OpenVitalsBLEClient {
       || message.contains("insufficient authentication")
       || message.contains("encryption is insufficient")
       || message.contains("insufficient encryption") {
-      return "Command writes need an authenticated BLE link. Disconnect other WHOOP clients, then reset/reconnect and accept any iOS pairing prompt."
+      return "Command writes need an authenticated BLE link. Disconnect other clients, then reset/reconnect and accept any iOS pairing prompt."
     }
 
     return nil

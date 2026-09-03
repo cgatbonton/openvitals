@@ -41,6 +41,9 @@ final class HealthDataStore: ObservableObject {
   @Published var heartRateTimelineStatus = "No HR samples stored"
 
   let bridge = OpenVitalsRustBridge()
+  // HCC: cloud-mode cache. Extensions cannot add stored properties, so the one
+  // box `HealthDataStore+HCC.swift` needs lives here. Untouched in bridge mode.
+  var hcc = HCCStoreState()
   let heartRateSeriesStore = HeartRateSeriesStore.shared
   var attemptedCatalogLoad = false
   var previewMissingData = false
@@ -77,7 +80,11 @@ final class HealthDataStore: ObservableObject {
     selectedAlgorithmByFamily = [:]
     primarySleepDetail = nil
     refreshHealthDashboardSnapshots()
-    refreshHeartRateTimeline()
+    // HCC: the heart-rate timeline is a BLE/SQLite read; cloud mode has no
+    // local sample store to walk.
+    if !HCCProviderSettings.isCloud {
+      refreshHeartRateTimeline()
+    }
     heartRateSeriesUpdateObserver = NotificationCenter.default.addObserver(
       forName: HeartRateSeriesStore.didUpdateNotification,
       object: nil,
@@ -171,6 +178,10 @@ final class HealthDataStore: ObservableObject {
   }
 
   func loadBridgeCatalogsIfNeeded() {
+    // HCC: no Rust metric registry is involved in cloud mode.
+    guard !HCCProviderSettings.isCloud else {
+      return
+    }
     guard !attemptedCatalogLoad else {
       return
     }
@@ -179,6 +190,10 @@ final class HealthDataStore: ObservableObject {
   }
 
   func refreshPacketInputsIfNeeded(for date: Date = Date()) {
+    // HCC: there are no packets to extract from in cloud mode.
+    guard !HCCProviderSettings.isCloud else {
+      return
+    }
     let inputWindow = Self.dailyMetricWindow(containing: date)
     guard packetInputReports.isEmpty || packetInputWindow.dateKey != inputWindow.dateKey || packetInputStatus == "No run" else {
       return
@@ -204,6 +219,11 @@ final class HealthDataStore: ObservableObject {
   }
 
   func refreshHealthMetrics(for date: Date = Date()) {
+    // HCC: in cloud mode the whole extract/score pipeline is one read.
+    if HCCProviderSettings.isCloud {
+      Task { await refreshFromHCC(date: date) }
+      return
+    }
     guard !healthMetricWorkIsRunning else {
       healthMetricRefreshStatus = "Health metric refresh already running"
       return

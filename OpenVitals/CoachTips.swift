@@ -94,7 +94,7 @@ enum CoachTipFactory {
         sentence("Sleep \(snapshot.displayValue)", debt, confidence),
         nextAction
       ),
-      source: "Local sleep score and schedule",
+      source: providerSource(local: "Local sleep score and schedule", cloud: "Command Center sleep score and schedule"),
       prompt: """
       Explain my sleep page and give one practical next action. Use only local OpenVitals context and call out missing data and provenance.
 
@@ -109,6 +109,13 @@ enum CoachTipFactory {
       systemImage: "moon.zzz.fill",
       tint: .indigo
     )
+  }
+
+  // HCC: a tip's provenance caption. In cloud mode the numbers above it came
+  // off the user's server, so calling them "Local" would misstate where they
+  // came from — the one thing a provenance line exists to get right.
+  private static func providerSource(local: String, cloud: String) -> String {
+    HCCProviderSettings.isCloud ? cloud : local
   }
 
   private static func recoveryTip(healthStore: HealthDataStore) -> CoachInlineTip {
@@ -126,7 +133,7 @@ enum CoachTipFactory {
       id: "recovery",
       title: "Recovery Coach",
       message: sentence(recovery, "HRV: \(hrv)", "Vitals: \(vitals)"),
-      source: "Local recovery, HRV, RHR, and vitals",
+      source: providerSource(local: "Local recovery, HRV, RHR, and vitals", cloud: "Command Center recovery, HRV, RHR, and vitals"),
       prompt: """
       Explain my recovery page and give one practical next action. Use recovery score, HRV, resting HR, provided vitals, and missing vitals. Cite local tool outputs.
 
@@ -154,7 +161,7 @@ enum CoachTipFactory {
       id: "strain",
       title: "Strain Coach",
       message: sentence(strain, "Activity: \(activity)", firstUseful(nextAction, motion)),
-      source: "Local strain, motion, and activity",
+      source: providerSource(local: "Local strain, motion, and activity", cloud: "Command Center strain and activity"),
       prompt: """
       Explain my strain page and give one practical training-load next action. Preserve the 0-21 strain scale and cite local tool outputs.
 

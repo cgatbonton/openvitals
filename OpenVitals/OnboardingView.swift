@@ -10,7 +10,9 @@ struct OnboardingView: View {
   let onComplete: () -> Void
   @StateObject private var locationPermissionRequester = OnboardingLocationPermissionRequester()
 
-  @State private var step = OnboardingStep.healthKit
+  // HCC: everyone starts on the provider choice; the rest of the flow follows
+  // from what they pick.
+  @State private var step = OnboardingStep.provider
   @State private var dateOfBirth = OnboardingDate.defaultDateOfBirth()
   @State private var validationMessage: String?
   @State private var healthKitStatus = "Not requested"
@@ -39,17 +41,26 @@ struct OnboardingView: View {
   @AppStorage(OnboardingStorage.healthKitPermissionHandled) private var healthKitPermissionHandled = false
   @AppStorage(OnboardingStorage.locationPermissionHandled) private var locationPermissionHandled = false
   @AppStorage(OnboardingStorage.notificationPermissionHandled) private var notificationPermissionHandled = false
+  // HCC: the provider switch. Read through @AppStorage rather than
+  // `HCCProviderSettings.current` so picking a source re-renders the flow.
+  @AppStorage(HCCProviderSettings.storageKey) private var providerRaw = HealthMetricProvider.bridge.rawValue
+
+  private var provider: HealthMetricProvider {
+    HealthMetricProvider(rawValue: providerRaw) ?? .bridge
+  }
+
+  private var flow: OnboardingFlow {
+    OnboardingFlow.forProvider(provider)
+  }
 
   var body: some View {
-    VStack(spacing: 0) {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 22) {
-          OnboardingHeader(step: step)
-          content
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 18)
-        .padding(.bottom, 28)
+    Group {
+      // HCC: the sign-in screen scrolls and titles itself, so it replaces the
+      // standard chrome rather than nesting inside it.
+      if step == .hccSignIn {
+        HCCSignInScreen(session: HCCSession.shared, onSignedIn: moveForward)
+      } else {
+        standardStepScaffold
       }
     }
     .background {
@@ -95,9 +106,31 @@ struct OnboardingView: View {
     }
   }
 
+  private var standardStepScaffold: some View {
+    VStack(spacing: 0) {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 22) {
+          OnboardingHeader(step: step, flow: flow)
+          content
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 28)
+      }
+    }
+  }
+
   @ViewBuilder
   private var content: some View {
     switch step {
+    // HCC:
+    case .provider:
+      OnboardingProviderStep(selected: chosenProvider, onSelect: selectProvider)
+    case .hccConsent:
+      OnboardingHCCConsentStep()
+    case .hccSignIn:
+      // Handled above: this step replaces the scaffold entirely.
+      EmptyView()
     case .profile:
       OnboardingProfileStep(
         firstName: $firstName,
@@ -177,7 +210,13 @@ struct OnboardingView: View {
 
   @ViewBuilder
   private var footer: some View {
-    if step == .connect {
+    // HCC: the choice screen's cards are its action, and the sign-in screen has
+    // its own submit button — neither wants the standard primary button.
+    if step == .provider {
+      EmptyView()
+    } else if step == .hccSignIn {
+      HCCOnboardingBackBar(onBack: moveBack)
+    } else if step == .connect {
       OnboardingConnectActionBar(
         ble: model.ble,
         onBack: moveBack,
@@ -186,7 +225,7 @@ struct OnboardingView: View {
       )
     } else {
       OnboardingStandardActionBar(
-        showBack: step.previous != nil,
+        showBack: flow.previous(before: step) != nil,
         primaryTitle: standardPrimaryTitle,
         onBack: moveBack,
         onPrimary: continueFromCurrentStep
@@ -232,6 +271,21 @@ struct OnboardingView: View {
     }
   }
 
+  /// HCC: the picked source, or nil while the user has not answered yet — the
+  /// stored default is `.bridge`, which must not be drawn as a choice made.
+  private var chosenProvider: HealthMetricProvider? {
+    UserDefaults.standard.string(forKey: HCCProviderSettings.storageKey) == nil ? nil : provider
+  }
+
+  /// HCC: record the choice, then step into that provider's path. Writing
+  /// `providerRaw` is what changes `flow`, so `moveForward` already navigates
+  /// the new sequence.
+  private func selectProvider(_ selection: HealthMetricProvider) {
+    providerRaw = selection.rawValue
+    model.recordUIAction("onboarding.provider.selected", detail: selection.rawValue)
+    moveForward()
+  }
+
   private func continueFromCurrentStep() {
     if step == .healthKit {
       requestHealthKitAccess()
@@ -249,6 +303,10 @@ struct OnboardingView: View {
   }
 
   private var standardPrimaryTitle: String {
+    // HCC: the consent step's primary button is the agreement.
+    if step == .hccConsent {
+      return "I agree, continue"
+    }
     if step == .healthKit {
       return "Import Weight"
     }
@@ -596,7 +654,19 @@ struct OnboardingView: View {
   }
 
   private func shouldSkip(_ candidate: OnboardingStep) -> Bool {
+    // HCC: belt and braces. The cloud path already leaves the Bluetooth-only
+    // steps out; this makes sure none of them can be reached even if a step is
+    // restored or jumped to from outside the path.
+    if provider == .hccCloud, [.location, .bluetooth, .connect].contains(candidate) {
+      return true
+    }
     switch candidate {
+    case .provider, .hccConsent:
+      return false
+    case .hccSignIn:
+      // Already signed in — from a debug launch, or from stepping back past a
+      // sign-in that succeeded. Nothing left to ask.
+      return HCCSession.shared.isSignedIn
     case .profile, .connect:
       return false
     case .healthKit:
@@ -619,18 +689,19 @@ struct OnboardingView: View {
     }
   }
 
+  // HCC: order comes from the provider's flow rather than from raw values.
   private func nextAvailableStep(after currentStep: OnboardingStep) -> OnboardingStep? {
-    var candidate = currentStep.next
+    var candidate = flow.next(after: currentStep)
     while let step = candidate, shouldSkip(step) {
-      candidate = step.next
+      candidate = flow.next(after: step)
     }
     return candidate
   }
 
   private func previousAvailableStep(before currentStep: OnboardingStep) -> OnboardingStep? {
-    var candidate = currentStep.previous
+    var candidate = flow.previous(before: currentStep)
     while let step = candidate, shouldSkip(step) {
-      candidate = step.previous
+      candidate = flow.previous(before: step)
     }
     return candidate
   }

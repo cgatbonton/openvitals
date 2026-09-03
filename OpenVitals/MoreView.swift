@@ -30,6 +30,35 @@ struct MoreView: View {
   }
 
   var body: some View {
+    // HCC: cloud mode has no band, no packet capture and no local metric store,
+    // so the rows that operate on them are gone — not deleted from the app, and
+    // not disabled-with-an-explanation, which would only be a dead end. It also
+    // gets the Command design's glass cards rather than the system list, since
+    // half of its rows are statements about this phase rather than settings.
+    // Bridge mode below is upstream's screen, untouched.
+    Group {
+      if HCCProviderSettings.isCloud {
+        HCCMoreScreen(healthStore: healthStore)
+      } else {
+        bridgeList
+      }
+    }
+    .navigationTitle("More")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbarBackground(.hidden, for: .navigationBar)
+    .navigationDestination(for: MoreRoute.self) { route in
+      MoreRouteDestinationView(route: route, healthStore: healthStore, store: store) {
+        router.openHealth(.algorithms)
+      }
+    }
+    .onAppear {
+      model.recordUIAction("page.opened", detail: "More")
+      store.refreshBridgeStatus(model: model)
+      store.refreshRecentCaptureSessions()
+    }
+  }
+
+  private var bridgeList: some View {
     List {
       Section {
         NavigationLink(value: MoreRoute.profile) {
@@ -65,19 +94,6 @@ struct MoreView: View {
     .tint(OpenVitalsTheme.accent)
     .listRowSeparatorTint(OpenVitalsTheme.separator)
     .openVitalsListBackground()
-    .navigationTitle("More")
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbarBackground(.hidden, for: .navigationBar)
-    .navigationDestination(for: MoreRoute.self) { route in
-      MoreRouteDestinationView(route: route, healthStore: healthStore, store: store) {
-        router.openHealth(.algorithms)
-      }
-    }
-    .onAppear {
-      model.recordUIAction("page.opened", detail: "More")
-      store.refreshBridgeStatus(model: model)
-      store.refreshRecentCaptureSessions()
-    }
   }
 
   private var routeStatus: MoreRouteStatus {

@@ -3,6 +3,9 @@ import UIKit
 
 struct OnboardingHeader: View {
   let step: OnboardingStep
+  // HCC: progress and the step count depend on which provider path is running,
+  // so they come from the flow rather than from the step alone.
+  let flow: OnboardingFlow
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
@@ -10,9 +13,9 @@ struct OnboardingHeader: View {
 
       VStack(alignment: .leading, spacing: 10) {
         HStack {
-          Text(step.stepLabel)
+          Text(flow.stepLabel(at: step))
           Spacer()
-          Text("\(Int((step.progress * 100).rounded()))%")
+          Text("\(Int((flow.progress(at: step) * 100).rounded()))%")
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
@@ -20,7 +23,7 @@ struct OnboardingHeader: View {
         Text(step.title)
           .font(.system(size: 34, weight: .bold, design: .rounded))
           .foregroundStyle(.primary)
-        ProgressView(value: step.progress)
+        ProgressView(value: flow.progress(at: step))
           .tint(.blue)
       }
     }

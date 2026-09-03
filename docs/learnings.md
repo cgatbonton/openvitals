@@ -272,3 +272,41 @@ Use short entries. Include the area, the context, the learning, and any follow-u
 - Context: GUI-launched Xcode can run the `Build Rust Core` phase without the user's login-shell `PATH`.
 - Learning: `Scripts/build_ios_rust.sh` must make common Rust install locations such as `~/.cargo/bin` visible before invoking Cargo, or Xcode reports `cargo: command not found`.
 - Follow-up: If a future phase script invokes developer tools installed outside Xcode, add explicit path discovery and a clear missing-tool error.
+
+## HCC cloud mode: a nullable-but-required JSON body needs a hand-written encoder
+
+`PUT /api/mobile/v1/devices/preferred` clears the "believe this device"
+override with `{"source": null}`, and its zod schema requires the key to be
+present. Swift's synthesized `Encodable` uses `encodeIfPresent` for optionals,
+so a `nil` field is OMITTED, not sent as null — the clear-the-override call
+would have 400'd with a message about the enum. `HCCPreferredSourceBody` writes
+`encode(to:)` by hand and calls `container.encode(source, forKey:)`, which does
+emit an explicit null. Verified against the dev server: explicit null → 200,
+omitted key → 400.
+
+## HCC cloud mode: `store.hcc` is not `@Published`, so mutations must announce themselves
+
+`HealthDataStore.hcc` is a plain reference (extensions cannot add stored
+properties, so the whole cloud cache lives in one box). Mutating it fires
+nothing on `ObservableObject`. The ring path got away with it because every
+refresh ended in `rebuildHCCDashboardState()`, which writes `@Published`
+properties. Screens that read the typed DTOs straight off `hcc` do not, so every
+mutation path calls `hccWillChange()` BEFORE it mutates.
+
+## HCC cloud mode: civil-day keys must use the instance's timezone, not the device's
+
+The server buckets every reading into a civil day in the INSTANCE's zone, and
+`?date=` on `/home`, `/activities`, `/sleep` and `/insights` is interpreted in
+that zone. A client that builds its day key with the device zone asks for the
+wrong day on all four at once as soon as the phone is somewhere far enough east
+or west — and nothing looks broken, because every screen agrees with itself.
+`HealthDataStore.hccInstanceTimeZone` (backed by `HCCInstanceZone`) is the one
+answer; `DateFormatter`s are cached per zone rather than one shared instance
+being reconfigured, because the day-key helpers are `nonisolated` and a
+reassigned `timeZone` under them is a data race.
+
+Verified by launching the simulator with `SIMCTL_CHILD_TZ=Pacific/Auckland`
+against an `America/Bogota` instance while the two were on different calendar
+days: the smoke's `civil day` line showed `device=Pacific/Auckland` and
+`asksFor=` the Bogota day.
+

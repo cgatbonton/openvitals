@@ -11,6 +11,18 @@ final class AppRouter: ObservableObject {
   @Published var coachPromptRequestID = 0
   @Published var coachScrollToBottomRequestID = 0
 
+  // HCC: DEBUG-only verification hook. When the launch environment names one of
+  // the More tab's screens (`HCC_DEBUG_OPEN_SCREEN=alarm|devices|customize|…`)
+  // the app opens on More, which is where that switch is read. Compiled out of
+  // Release; the default tab is unchanged in every other case.
+  init() {
+    #if DEBUG
+    if HCCMoreScreen.debugLaunchWantsMoreTab {
+      selectedTab = .more
+    }
+    #endif
+  }
+
   func openHealth(_ route: HealthRoute?) {
     selectedTab = .home
     if let route {
@@ -86,6 +98,18 @@ final class AppRouter: ObservableObject {
     let routeName = url.pathComponents.dropFirst().first ?? ""
     if routeName.isEmpty {
       openHealth(nil)
+      return true
+    }
+    // HCC: the server's push notifications link to two destinations this app
+    // has no screen for — `insights` (the weekly log) and `settings` (sent when
+    // a session needs re-authenticating). Land them on the nearest real surface
+    // so a tapped notification never does nothing.
+    if routeName == "insights" {
+      openHealth(nil)
+      return true
+    }
+    if routeName == "settings" {
+      openMore(nil)
       return true
     }
     guard let route = HealthRoute(rawValue: routeName) else {

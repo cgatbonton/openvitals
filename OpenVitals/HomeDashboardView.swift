@@ -37,12 +37,19 @@ struct HomeDashboardView: View {
           openSnapshot: openHealthMonitorSnapshot
         )
 
-        HomeAlarmSection(ble: model.ble)
+        // HCC: the wake alarm is written to a paired band over BLE, and the
+        // packet-input/algorithm rows describe the local pipeline. Neither
+        // exists in cloud mode, so neither section is drawn.
+        if !HCCProviderSettings.isCloud {
+          HomeAlarmSection(ble: model.ble)
+        }
 
-        HomeDataAlgorithmsSection(
-          snapshots: dashboard.dataAlgorithmSnapshots,
-          openSnapshot: { openHealth($0.route) }
-        )
+        if !dashboard.dataAlgorithmSnapshots.isEmpty {
+          HomeDataAlgorithmsSection(
+            snapshots: dashboard.dataAlgorithmSnapshots,
+            openSnapshot: { openHealth($0.route) }
+          )
+        }
 
       }
       .padding(.horizontal, 16)
@@ -90,6 +97,7 @@ struct HomeDashboardView: View {
       healthStore.loadBridgeCatalogsIfNeeded()
       alignToLatestEvidenceDateIfNeeded()
       refreshDailyScores(for: selectedDate)
+      openDebugLaunchRouteIfRequested()
     }
     .onChange(of: selectedDate) { _, newValue in
       refreshDailyScores(for: newValue)
@@ -137,14 +145,24 @@ struct HomeDashboardView: View {
   }
 
   private var homeScoreSyncIsRunning: Bool {
-    scoreSyncIsPreparing || model.ble.isHistoricalSyncing || healthStore.healthMetricWorkIsRunning
+    if HCCProviderSettings.isCloud {
+      return healthStore.healthMetricRefreshIsRunning
+    }
+    return scoreSyncIsPreparing || model.ble.isHistoricalSyncing || healthStore.healthMetricWorkIsRunning
   }
 
   private var homeScoreSyncCanRun: Bool {
-    model.ble.canSyncHistorical && !homeScoreSyncIsRunning
+    // HCC: cloud mode needs no band in range — the button is a re-read.
+    if HCCProviderSettings.isCloud {
+      return !homeScoreSyncIsRunning
+    }
+    return model.ble.canSyncHistorical && !homeScoreSyncIsRunning
   }
 
   private var homeScoreSyncButtonTitle: String {
+    if HCCProviderSettings.isCloud {
+      return homeScoreSyncIsRunning ? "Reading" : "Refresh"
+    }
     if scoreSyncIsPreparing {
       return "Preparing"
     }
@@ -158,6 +176,11 @@ struct HomeDashboardView: View {
   }
 
   private var homeScoreSyncDetail: String {
+    // HCC: the band-sync narration below describes a pipeline cloud mode does
+    // not run; the read status is the whole story here.
+    if HCCProviderSettings.isCloud {
+      return healthStore.healthMetricRefreshStatus
+    }
     if scoreSyncIsPreparing {
       return model.dailyMetricSyncStatus
     }
@@ -213,6 +236,29 @@ struct HomeDashboardView: View {
     )
   }
 
+  /// HCC: verification hook. `HCC_DEBUG_OPEN_DATE=YYYY-MM-DD` selects a day and
+  /// `HCC_DEBUG_OPEN_ROUTE=<HealthRoute raw value>` pushes one detail screen on
+  /// launch, so a simulator screenshot can reach Sleep or Recovery for a chosen
+  /// day without UI automation — `simctl` cannot tap, and a `simctl openurl`
+  /// deep link is gated behind a system confirmation alert that also needs a
+  /// tap. DEBUG-only and a no-op without the variables, so a Release build has
+  /// no launch-environment path into a route.
+  private func openDebugLaunchRouteIfRequested() {
+    #if DEBUG
+    let environment = ProcessInfo.processInfo.environment
+    if let day = environment["HCC_DEBUG_OPEN_DATE"],
+       let date = HealthDataStore.hccLocalDate(fromDayKey: day) {
+      selectedDate = date
+    }
+    guard let raw = environment["HCC_DEBUG_OPEN_ROUTE"],
+          let route = HealthRoute(rawValue: raw)
+    else {
+      return
+    }
+    openHealthRoute(route)
+    #endif
+  }
+
   private func openHealth(_ route: HealthRoute) {
     openHealthRoute(route)
     model.recordUIAction("health.deep_link.opened", detail: route.title)
@@ -228,6 +274,11 @@ struct HomeDashboardView: View {
 
   private func startHomeScoreSync() {
     guard !homeScoreSyncIsRunning else {
+      return
+    }
+    if HCCProviderSettings.isCloud {
+      model.recordUIAction("home.daily_scores.refresh.requested", detail: "cloud")
+      Task { await healthStore.refreshFromHCC(date: selectedDate) }
       return
     }
     healthStore.loadBridgeCatalogsIfNeeded()
@@ -262,11 +313,21 @@ struct HomeDashboardView: View {
   }
 
   private func refreshDailyScores(for date: Date) {
+    // HCC: one read covers the whole day in cloud mode.
+    if HCCProviderSettings.isCloud {
+      Task { await healthStore.refreshFromHCC(date: date) }
+      return
+    }
     healthStore.refreshPacketInputsIfNeeded(for: date)
     healthStore.runPacketScores(for: date)
   }
 
   private func alignToLatestEvidenceDateIfNeeded() {
+    // HCC: this walks the local packet store for the newest capture. The
+    // server dates its own days, so cloud mode stays on the day the user chose.
+    guard !HCCProviderSettings.isCloud else {
+      return
+    }
     guard !alignedToLatestEvidenceDate else {
       return
     }
@@ -290,6 +351,22 @@ struct HomeDashboardView: View {
   }
 
   private var dashboardMetrics: HomeDashboardMetrics {
+    // HCC: the server already dated every score it sent, so the cloud rings are
+    // used as they arrived — re-dating them through `ScoreDateTimeline` would
+    // re-stamp a day the phone did not decide. Only the strain unit conversion
+    // (0–21 to a dial percent) still applies.
+    if HCCProviderSettings.isCloud, let cloud = healthStore.hccScoreSnapshots(for: selectedDate) {
+      return HomeDashboardMetrics(
+        scoreSnapshots: [
+          homeSnapshot(for: .sleep, in: cloud),
+          homeSnapshot(for: .recovery, in: cloud),
+          homeSnapshot(for: .strain, in: cloud),
+        ],
+        healthMonitorSnapshots: healthStore.healthDashboardVitalSnapshots,
+        dataAlgorithmSnapshots: [],
+        missingDataItems: healthStore.hccMissingDataItems()
+      )
+    }
     let snapshots = healthStore.healthDashboardExploreSnapshots
     let sleep = homeSnapshot(for: .sleep, in: snapshots)
     let recovery = homeSnapshot(for: .recovery, in: snapshots)
@@ -304,7 +381,9 @@ struct HomeDashboardView: View {
       dataAlgorithmSnapshots: healthStore.healthDashboardAlgorithmSnapshots.filter {
         [.packetInputs, .algorithms].contains($0.route)
       },
-      missingDataItems: healthStore.homeMissingDataItems()
+      missingDataItems: HCCProviderSettings.isCloud
+        ? healthStore.hccMissingDataItems()
+        : healthStore.homeMissingDataItems()
     )
   }
 

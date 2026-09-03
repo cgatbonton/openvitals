@@ -137,6 +137,15 @@ struct RecoveryV2OverviewPage: View {
       }
     }
     .navigationTitle("Recovery")
+    // HCC: cloud mode's numbers for a day come from one read, and a detail
+    // screen can be reached directly (deep link, date picker) without Home
+    // having fetched that day. Asking here makes the screen self-sufficient
+    // instead of silently showing an empty day. Re-runs whenever the date
+    // changes; the store coalesces overlapping reads.
+    .task(id: selectedDate) {
+      guard HCCProviderSettings.isCloud else { return }
+      await store.refreshFromHCC(date: selectedDate)
+    }
     .navigationBarTitleDisplayMode(.inline)
     .toolbarBackground(.hidden, for: .navigationBar)
     .toolbar {
@@ -190,7 +199,9 @@ struct RecoveryV2OverviewPage: View {
   private var dateLabel: String {
     let suffix = selectedDate.formatted(.dateTime.day().month(.abbreviated))
     let prefix = ScoreDateTimeline.dateLabel(for: selectedDate)
-    return "\(prefix), \(suffix)"
+    // "Today, Sep 2" reads well; "Aug 25, Aug 25" does not. Past days already
+    // label themselves with the date, so there is no relative word to prepend.
+    return prefix == suffix ? suffix : "\(prefix), \(suffix)"
   }
 
   private var coachTip: CoachInlineTip {

@@ -5,6 +5,15 @@ import UIKit
 
 extension HealthDataStore {
   func runPacketScores(for date: Date = Date(), completion: (() -> Void)? = nil) {
+    // HCC: cloud mode has no local score run — the server already scored the
+    // day, so "recompute" means "read it again".
+    if HCCProviderSettings.isCloud {
+      Task {
+        await refreshFromHCC(date: date)
+        completion?()
+      }
+      return
+    }
     guard !packetScoreIsRunning else {
       pendingPacketScoreDate = date
       packetScoreStatus = "Bridge score run already running; queued selected date..."
@@ -52,6 +61,10 @@ extension HealthDataStore {
     for date: Date = Date(),
     recomputeIfMissing: Bool = false
   ) {
+    // HCC: nothing is persisted locally in cloud mode.
+    guard !HCCProviderSettings.isCloud else {
+      return
+    }
     let scoreWindow = Self.dailyMetricWindow(containing: date)
     let shouldLoadPersistedReports = packetScoreReports.isEmpty || packetScoreWindow.dateKey != scoreWindow.dateKey || packetScoreStatus == "No run"
     guard shouldLoadPersistedReports else {
@@ -406,6 +419,12 @@ extension HealthDataStore {
   }
 
   func refreshHealthDashboardSnapshots() {
+    // HCC: rebuild from the cached cloud payloads instead of the bridge's
+    // landing snapshots, which would run SQLite reads that cannot succeed here.
+    if HCCProviderSettings.isCloud {
+      rebuildHCCDashboardState()
+      return
+    }
     let landing = landingSnapshots(
       liveHeartRateBPM: nil,
       liveHeartRateSource: "",
@@ -440,6 +459,11 @@ extension HealthDataStore {
   }
 
   func trimmedHealthMonitorSnapshots(allowLiveFallbacks: Bool = true) -> [HealthMetricSnapshot] {
+    // HCC: the cloud rows are already exactly the streams the server reports —
+    // there is no live-BLE subset to trim down to.
+    if HCCProviderSettings.isCloud {
+      return hccVitalSnapshots()
+    }
     let visibleIDs = ["respiratory-rate", "resting-hr", "resting-hrv"]
     return healthMonitorSnapshots(allowLiveFallbacks: allowLiveFallbacks).filter { snapshot in
       visibleIDs.contains(snapshot.id)
@@ -453,6 +477,11 @@ extension HealthDataStore {
     restingHeartRateEstimateSource: String = "ble.hr.standard.low_quartile",
     allowLiveFallbacks: Bool = true
   ) -> [HealthMetricSnapshot] {
+    // HCC: every vital comes off `/vitals`; none of the packet-feature or live
+    // BLE fallbacks below have anything to read in cloud mode.
+    if HCCProviderSettings.isCloud {
+      return hccVitalSnapshots()
+    }
     if previewMissingData {
       return Self.baseHealthMonitorSnapshots.map { snapshot in
         HealthMetricSnapshot(
@@ -496,6 +525,11 @@ extension HealthDataStore {
   }
 
   func snapshot(for route: HealthRoute) -> HealthMetricSnapshot {
+    // HCC: every detail screen resolves its hero through here, so this is the
+    // single place cloud mode has to answer for a route.
+    if HCCProviderSettings.isCloud {
+      return hccSnapshot(for: route)
+    }
     let snapshot = Self.baseLandingSnapshots.first { $0.route == route }
       ?? Self.baseLandingSnapshots[0]
     if route == .sleep && !previewMissingData {
@@ -546,6 +580,12 @@ extension HealthDataStore {
   }
 
   func strainSnapshot(for date: Date, calendar: Calendar = .current) -> HealthMetricSnapshot {
+    // HCC: the server dates its own strain, so a cached day answers directly;
+    // an uncached one falls through to the unavailable cloud base rather than
+    // to a local history that does not exist.
+    if HCCProviderSettings.isCloud {
+      return hccStrainSnapshot(for: date) ?? hccSnapshot(for: .strain)
+    }
     let base = Self.baseLandingSnapshots.first { $0.route == .strain } ?? Self.baseLandingSnapshots[0]
     let snapshot = strainSnapshot(base: base)
     let selectedWindow = Self.dailyMetricWindow(containing: date, calendar: calendar)
@@ -825,6 +865,12 @@ extension HealthDataStore {
   }
 
   func recoveryScoreValue() -> Double? {
+    // HCC: the single root every recovery readout (hero, coach tip, missing-data
+    // list) resolves through, so one branch keeps them all agreeing with the
+    // server instead of reporting 0 next to the server's own number.
+    if HCCProviderSettings.isCloud {
+      return hccScoreValue(for: .recovery)
+    }
     guard !usesPreviewPacketData else {
       return nil
     }

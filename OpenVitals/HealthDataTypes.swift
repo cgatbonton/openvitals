@@ -42,6 +42,10 @@ struct HealthDataSource: Equatable {
     case bridge = "Bridge"
     case local = "Local"
     case live = "Live"
+    // HCC: a value the user's own self-hosted Command Center already scored.
+    // Distinct from `.bridge` on purpose — the number was computed off-device,
+    // and a row must be able to say so.
+    case cloud = "Cloud"
     case unavailable = "Unavailable"
   }
 
@@ -77,6 +81,18 @@ struct HealthDataSource: Equatable {
 
   static func unavailable(_ detail: String) -> HealthDataSource {
     HealthDataSource(kind: .unavailable, metricSourceKind: .unavailable, detail: detail)
+  }
+
+  // HCC: a score the Command Center's own engine produced — an estimate made
+  // off this device, so `.localEstimate` is the honest metric-source kind.
+  static func cloud(_ detail: String) -> HealthDataSource {
+    HealthDataSource(kind: .cloud, metricSourceKind: .localEstimate, detail: detail)
+  }
+
+  // HCC: a vital the Command Center relayed from a wearable's sensor rather
+  // than derived itself.
+  static func cloudDeviceSensor(_ detail: String) -> HealthDataSource {
+    HealthDataSource(kind: .cloud, metricSourceKind: .deviceSensor, detail: detail)
   }
 
   static func deviceCounter(_ detail: String) -> HealthDataSource {
