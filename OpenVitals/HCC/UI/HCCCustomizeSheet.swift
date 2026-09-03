@@ -54,7 +54,7 @@ struct HCCCustomizeSheet: View {
   ]
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
+    VStack(alignment: .leading, spacing: 10) {
       HCCDetailHeader(title: "Customize dashboard", subtitle: "Choose tiles and their order")
       .padding(.horizontal, 16)
       .padding(.top, 14)

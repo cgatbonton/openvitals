@@ -19,6 +19,11 @@ final class AppRouter: ObservableObject {
     #if DEBUG
     if HCCMoreScreen.debugLaunchWantsMoreTab {
       selectedTab = .more
+    } else if HCCDebugScreen.requested != nil {
+      // The Health tab reads the same variable for its own eight screens, but
+      // only once it is on screen — without this the app opened on Home and a
+      // `HCC_DEBUG_OPEN_SCREEN=health` launch silently screenshotted Home.
+      selectedTab = .health
     }
     #endif
   }

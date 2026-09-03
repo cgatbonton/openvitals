@@ -52,8 +52,10 @@ struct HCCSectionHeader<Trailing: View>: View {
       Spacer(minLength: 8)
       trailing()
     }
-    .padding(.top, 14)
-    .padding(.bottom, 8)
+    // `.sec{margin:14px 0 8px}`, less the spacing the containing stack already
+    // contributes on each side (10 above between cards, 8 below before tiles).
+    .padding(.top, 4)
+    .padding(.bottom, 0)
   }
 }
 

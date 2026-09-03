@@ -272,7 +272,12 @@ struct HCCScreen<Content: View>: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 0) {
+      // The mockup's `.card{margin-bottom:10px}`, expressed once as stack
+      // spacing rather than as a margin on each card. Stack spacing is the
+      // single mechanism for vertical rhythm on these screens: anything that
+      // needs a DIFFERENT gap (tiles and activity rows at 8) sets it on its own
+      // stack, and nothing adds a bottom padding that would stack on top of it.
+      VStack(alignment: .leading, spacing: 10) {
         content()
       }
       .padding(.horizontal, 16)

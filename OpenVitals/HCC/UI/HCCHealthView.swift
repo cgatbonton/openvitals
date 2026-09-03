@@ -160,7 +160,6 @@ struct HCCHealthLanding: View {
       }
     }
     .hccCard()
-    .padding(.top, 10)
   }
 
   // ── Loading ────────────────────────────────────────────────────────────────

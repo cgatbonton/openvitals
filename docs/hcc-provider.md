@@ -121,6 +121,26 @@ No manufacturer name reaches the interface (AGENTS.md). The server's
 and not any particular wrist. `HCCCopy.originLabel` / `HCCCopy.sourceLabel` are
 the only place that mapping lives — route new labels through them.
 
+## Card Spacing Is Stack Spacing
+
+Vertical rhythm on the cloud screens has ONE mechanism: the spacing of the stack
+that holds the cards. `HCCScreen`'s stack is `spacing: 10` (the mockup's
+`.card{margin-bottom:10px}`) and backs every detail screen, More and the four
+Health pages; Home's scroll stack matches it; the dashboard tile list and the
+activity-row list use `spacing: 8` (`.tile`/`.actv`), as does the Health 2x2
+grid.
+
+**Do not add `.padding(.bottom)` to a card to separate it from the next one** —
+it stacks on top of the container's spacing instead of replacing it, which is
+exactly how the chart tile ended up 16 pt from the tile below it and the Health
+monitor card 20 pt from the grid. Rows *inside* a card stay flush and are
+separated by `HCCDivider`, so a `spacing: 0` stack there is correct.
+
+Two elements carry a small padding on purpose, as the remainder of a larger
+mockup margin the stack already partly supplies: `HCCDetailHeader` adds 2 (10 +
+2 = the mockup's 12) and `HCCSectionHeader` adds 4 on top (10 + 4 = 14). Both
+are commented as such.
+
 ## Bundled Fonts
 
 The "C · Command" type is bundled under `OpenVitals/HCC/Fonts/`, added to the

@@ -62,7 +62,9 @@ struct HCCDetailHeader: View {
         .buttonStyle(.plain)
       }
     }
-    .padding(.bottom, 12)
+    // The mockup's `.hdr{margin-bottom:12px}`, minus the 10 its container
+    // already supplies. Every stack that holds a header uses spacing 10.
+    .padding(.bottom, 2)
   }
 
   private var backButton: some View {

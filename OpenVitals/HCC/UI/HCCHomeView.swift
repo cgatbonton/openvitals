@@ -25,7 +25,8 @@ struct HCCHomeView: View {
     NavigationStack(path: $path) {
       ScrollViewReader { scroller in
       ScrollView {
-        VStack(alignment: .leading, spacing: 0) {
+        // Same rule as `HCCScreen`: 10 pt between cards, set once here.
+        VStack(alignment: .leading, spacing: 10) {
           topBar
           // Only when the day itself did not arrive. A partial failure — the
           // benign 404 `/sleep/latest` answers with on a day with no night, say
@@ -121,7 +122,7 @@ struct HCCHomeView: View {
       Spacer(minLength: 8)
       devicePill
     }
-    .padding(.bottom, 12)
+    .padding(.bottom, 2)
   }
 
   private var devicePill: some View {
@@ -166,7 +167,7 @@ struct HCCHomeView: View {
       ringWrap(title: "Strain", kind: .strain, model: strainRing)
     }
     .padding(.top, 2)
-    .padding(.bottom, 12)
+    .padding(.bottom, 2)
   }
 
   private func ringWrap(title: String, kind: HCCRingKind, model: RingModel) -> some View {
@@ -348,7 +349,6 @@ struct HCCHomeView: View {
       )
     }
     .hccCard()
-    .padding(.top, 4)
   }
 
   private func activityRow(_ activity: HCCActivity) -> some View {
@@ -400,7 +400,9 @@ struct HCCHomeView: View {
 
   private var dashboardSection: some View {
     let tiles = resolvedTiles
-    return VStack(alignment: .leading, spacing: 0) {
+    // Tiles are 8 apart (`.tile{margin-bottom:8px}`), not 10 — and the section
+    // header's 8-pt gap to the first tile comes from this same spacing.
+    return VStack(alignment: .leading, spacing: 8) {
       HCCSectionHeader(title: "My Dashboard") {
         HCCSectionLink(title: "Customize \u{270E}") { sheet = .customize }
       }
@@ -500,7 +502,6 @@ struct HCCHomeView: View {
         )
       }
       .hccCard()
-      .padding(.bottom, 8)
     } else if let value = tileValue(tile) {
       HCCDashboardTileRow(
         label: tile.label,
