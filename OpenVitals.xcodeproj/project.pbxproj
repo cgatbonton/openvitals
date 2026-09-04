@@ -186,6 +186,7 @@
 		E10000000000000000000606 /* HCCHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000606 /* HCCHealthView.swift */; };
 		E10000000000000000000607 /* HCCBiomarkersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000607 /* HCCBiomarkersView.swift */; };
 		E10000000000000000000608 /* HCCInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000608 /* HCCInsightsView.swift */; };
+		E10000000000000000001801 /* HCCInsightDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000001801 /* HCCInsightDetailSheet.swift */; };
 		E10000000000000000001701 /* HCCBiomarkerDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000001701 /* HCCBiomarkerDetailSheet.swift */; };
 		E10000000000000000000609 /* HCCGeneticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000609 /* HCCGeneticsView.swift */; };
 		E10000000000000000000610 /* HCCProtocolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000610 /* HCCProtocolsView.swift */; };
@@ -478,6 +479,7 @@
 		E20000000000000000000606 /* HCCHealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCHealthView.swift; sourceTree = "<group>"; };
 		E20000000000000000000607 /* HCCBiomarkersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCBiomarkersView.swift; sourceTree = "<group>"; };
 		E20000000000000000000608 /* HCCInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCInsightsView.swift; sourceTree = "<group>"; };
+		E20000000000000000001801 /* HCCInsightDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCInsightDetailSheet.swift; sourceTree = "<group>"; };
 		E20000000000000000001701 /* HCCBiomarkerDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCBiomarkerDetailSheet.swift; sourceTree = "<group>"; };
 		E20000000000000000000609 /* HCCGeneticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCGeneticsView.swift; sourceTree = "<group>"; };
 		E20000000000000000000610 /* HCCProtocolsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HCCProtocolsView.swift; sourceTree = "<group>"; };
@@ -856,6 +858,7 @@
 				E20000000000000000000607 /* HCCBiomarkersView.swift */,
 				E20000000000000000001701 /* HCCBiomarkerDetailSheet.swift */,
 				E20000000000000000000608 /* HCCInsightsView.swift */,
+				E20000000000000000001801 /* HCCInsightDetailSheet.swift */,
 				E20000000000000000000609 /* HCCGeneticsView.swift */,
 				E20000000000000000000610 /* HCCProtocolsView.swift */,
 				E20000000000000000000801 /* HCCJournalView.swift */,
@@ -1251,6 +1254,7 @@
 				E10000000000000000000607 /* HCCBiomarkersView.swift in Sources */,
 				E10000000000000000001701 /* HCCBiomarkerDetailSheet.swift in Sources */,
 				E10000000000000000000608 /* HCCInsightsView.swift in Sources */,
+				E10000000000000000001801 /* HCCInsightDetailSheet.swift in Sources */,
 				E10000000000000000000609 /* HCCGeneticsView.swift in Sources */,
 				E10000000000000000000610 /* HCCProtocolsView.swift in Sources */,
 				E10000000000000000000801 /* HCCJournalView.swift in Sources */,

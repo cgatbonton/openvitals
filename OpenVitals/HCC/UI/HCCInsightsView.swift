@@ -101,7 +101,7 @@ struct HCCInsightsView: View {
         .hccCard()
     } else {
       ForEach(shown) { card in
-        InsightCardView(card: card)
+        HCCInsightPanel(card: card)
       }
     }
   }
@@ -307,10 +307,23 @@ private struct WeeklyLogRow: View {
 
 /// The web page's insight panel: the status dot and badges, the narrative, the
 /// plan, and the technical detail one tap away.
-private struct InsightCardView: View {
+///
+/// Shared, not private: the Health landing's "Active insights" rows show a
+/// two-line crop of the summary and open this same panel in a sheet
+/// (`HCCInsightDetailSheet`) when one is tapped. One renderer means the short
+/// form and the full form cannot describe the same card differently.
+struct HCCInsightPanel: View {
   let card: HCCInsightCard
 
-  @State private var showsDetail = false
+  @State private var showsDetail: Bool
+
+  /// `initiallyExpanded` opens "The detail behind it" already unfolded — what
+  /// the sheet wants, since a tap that asked for the full card should not need
+  /// a second tap to finish showing it. The Insights list keeps it folded.
+  init(card: HCCInsightCard, initiallyExpanded: Bool = false) {
+    self.card = card
+    _showsDetail = State(initialValue: initiallyExpanded)
+  }
 
   var body: some View {
     HStack(alignment: .top, spacing: 10) {
@@ -438,7 +451,8 @@ private struct InsightCardView: View {
 
   // ── The web page's own maps ────────────────────────────────────────────────
 
-  private static func kindLabel(_ kind: String) -> String {
+  /// Shared with `HCCInsightDetailSheet`, which puts the kind in its header.
+  static func kindLabel(_ kind: String) -> String {
     switch kind {
     case "RISK_FLAG": "Risk"
     case "SAFETY": "Safety"

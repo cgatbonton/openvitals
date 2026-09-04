@@ -124,6 +124,10 @@ struct HCCHealthLanding: View {
   /// key-vitals tiles is hovered.
   @State private var selectedVital: HCCMetricView?
 
+  /// The active insight whose full card is open. The row crops the summary to
+  /// two lines; this is how the rest of it is reached.
+  @State private var selectedInsight: HCCInsightCard?
+
   init(store: HealthDataStore) {
     self.store = store
   }
@@ -139,6 +143,12 @@ struct HCCHealthLanding: View {
       keyVitals
       monitor
       activeInsights
+    }
+    .sheet(item: $selectedInsight) { card in
+      HCCInsightDetailSheet(card: card)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(HCCTheme.Color.bg)
     }
     .sheet(item: $selectedVital) { metric in
       HCCBiomarkerDetailSheet(metric: metric)
@@ -272,10 +282,14 @@ struct HCCHealthLanding: View {
         } else {
           VStack(spacing: 0) {
             ForEach(Array(flags.enumerated()), id: \.element.id) { index, flag in
-              ActiveFlagRow(flag: flag, showsDivider: index < flags.count - 1)
+              ActiveFlagRow(flag: flag, showsDivider: index < flags.count - 1) {
+                selectedInsight = flag
+              }
             }
           }
-          HCCFootnote("The short form. The plan behind each one, and the resolved history, are on Insights.")
+          HCCFootnote(
+            "The short form — tap one for the whole card. The resolved history is on Insights."
+          )
             .padding(.top, 8)
         }
       } else {
@@ -507,32 +521,45 @@ private struct KeyVitalRow: View {
 private struct ActiveFlagRow: View {
   let flag: HCCInsightCard
   let showsDivider: Bool
+  let onTap: () -> Void
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(alignment: .top, spacing: 10) {
-        HCCStatusDot(status: HCCStatusDot.severityStatus(flag.severity), size: 8)
-          .padding(.top, 4)
-
-        VStack(alignment: .leading, spacing: 3) {
-          Text(flag.title)
-            .font(HCCTheme.Font.body(size: 12.5, weight: .medium))
-            .foregroundStyle(HCCTheme.Color.text)
-            .fixedSize(horizontal: false, vertical: true)
-          Text(flag.summary)
-            .font(HCCTheme.Font.body(size: 11.5))
-            .lineSpacing(2.5)
-            .foregroundStyle(HCCTheme.Color.muted)
-            .lineLimit(2)
-        }
-
-        Spacer(minLength: 8)
-
-        HCCPill(flag.severity, tone: .severity(flag.severity))
-      }
-      .padding(.vertical, 8)
+      Button(action: onTap) { rowContent }
+        .buttonStyle(.plain)
       if showsDivider { HCCDivider() }
     }
+  }
+
+  private var rowContent: some View {
+    HStack(alignment: .top, spacing: 10) {
+      HCCStatusDot(status: HCCStatusDot.severityStatus(flag.severity), size: 8)
+        .padding(.top, 4)
+
+      VStack(alignment: .leading, spacing: 3) {
+        Text(flag.title)
+          .font(HCCTheme.Font.body(size: 12.5, weight: .medium))
+          .foregroundStyle(HCCTheme.Color.text)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(flag.summary)
+          .font(HCCTheme.Font.body(size: 11.5))
+          .lineSpacing(2.5)
+          .foregroundStyle(HCCTheme.Color.muted)
+          .lineLimit(2)
+      }
+
+      Spacer(minLength: 8)
+
+      HCCPill(flag.severity, tone: .severity(flag.severity))
+
+      Text("\u{203A}")
+        .font(HCCTheme.Font.body(size: 13))
+        .foregroundStyle(HCCTheme.Color.muted)
+        .padding(.top, 2)
+    }
+    .padding(.vertical, 8)
+    // The cropped summary leaves a lot of empty row; all of it opens the card.
+    .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
   }
 }

@@ -724,6 +724,13 @@ struct HCCComingSoonSheet: View {
 /// markdown parser. It is not a general renderer — no tables, no code fences,
 /// no images — because nothing the server writes uses them. A line it does not
 /// recognise renders as a paragraph rather than disappearing.
+///
+/// Every block takes `.fixedSize(horizontal: false, vertical: true)`. Without it
+/// a `Text` nested inside a padded, backgrounded container is offered too little
+/// height and silently truncates with an ellipsis — which on these screens means
+/// the server's prose is CUT, and a half-sentence reads as the whole claim. It
+/// showed up first inside the insight panel's "detail behind it" block, where
+/// the reasoning stopped after two lines.
 struct HCCMarkdown: View {
   let text: String
   var size: Double = 12.5
@@ -737,11 +744,13 @@ struct HCCMarkdown: View {
           inline(content)
             .font(HCCTheme.Font.display(size: size + (level == 1 ? 2.5 : 1), weight: .medium))
             .foregroundStyle(HCCTheme.Color.text)
+            .fixedSize(horizontal: false, vertical: true)
         case let .paragraph(content):
           inline(content)
             .font(HCCTheme.Font.body(size: size))
             .lineSpacing(3)
             .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
         case let .item(marker, content):
           HStack(alignment: .firstTextBaseline, spacing: 7) {
             Text(marker)
@@ -751,6 +760,7 @@ struct HCCMarkdown: View {
               .font(HCCTheme.Font.body(size: size))
               .lineSpacing(3)
               .foregroundStyle(color)
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
       }
