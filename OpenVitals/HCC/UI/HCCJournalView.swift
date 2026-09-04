@@ -41,8 +41,11 @@ private struct HCCJournalScreen: View {
           HCCErrorNote(error, retry: { await store.loadJournal(day: dayKey, force: true) })
         }
         if !HCCJournalAnchor.isImpactsOnly {
-          behaviorsCard.id(HCCJournalAnchor.behaviors.rawValue)
+          // Doses first (DECISION 2026-09-03, Chris): the stack is what gets
+          // ticked every day, so it should not sit behind a scroll past the
+          // behaviors. Behaviors stay a full card, just underneath.
           dosesCard.id(HCCJournalAnchor.doses.rawValue)
+          behaviorsCard.id(HCCJournalAnchor.behaviors.rawValue)
         }
         impactsCard.id(HCCJournalAnchor.impacts.rawValue)
       }
@@ -227,8 +230,8 @@ private struct HCCJournalScreen: View {
   private func doseRow(_ due: HCCDueDose, showsDivider: Bool) -> some View {
     let taken = state.isDoseTaken(due)
     return HCCDoseCheckRow(
-      title: due.protocolTitle,
-      subtitle: due.productName,
+      title: Self.doseTitle(due),
+      subtitle: nil,
       doseText: Self.doseText(due),
       count: due.expectedPerDay > 1 ? "\(due.takenCount)/\(due.dueCount)" : nil,
       // A cycling product skips days by design; saying so is what stops a blank
@@ -248,6 +251,21 @@ private struct HCCJournalScreen: View {
         }
       }
     )
+  }
+
+  /// What the row is called: the supplement, not the protocol it belongs to.
+  ///
+  /// DECISION 2026-09-03 (Chris): the protocol title ("Daily Foundational
+  /// Supplement Stack") is repeated down every row of a stack and says nothing
+  /// the card's own header does not, so the product name is the whole label.
+  ///
+  /// It falls BACK to the protocol title, because `productName` is null for a
+  /// protocol with no linked product — a free-text regimen like a peptide
+  /// course — and those rows have no other name. Dropping the title outright
+  /// would leave them blank, which is the one thing worse than a repeated word.
+  static func doseTitle(_ due: HCCDueDose) -> String {
+    if let name = due.productName, !name.isEmpty { return name }
+    return due.protocolTitle
   }
 
   /// The protocol's free-text regimen when it has one, otherwise the product's

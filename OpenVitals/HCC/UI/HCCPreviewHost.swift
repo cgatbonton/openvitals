@@ -198,9 +198,30 @@ struct HCCComponentGallery: View {
     }
   }
 
+  /// A week shaped to stress the chart's edges, not to look tidy.
+  private static let strainRecoveryFixture: [HCCStrainRecoveryPoint] = [
+    .init(day: "2026-08-31", weekday: "Mon", dayOfMonth: "31", strain: 5.0, recovery: 100),
+    .init(day: "2026-09-01", weekday: "Tue", dayOfMonth: "1", strain: 15.7, recovery: 84),
+    .init(day: "2026-09-02", weekday: "Wed", dayOfMonth: "2", strain: 14.2, recovery: 51),
+    .init(day: "2026-09-03", weekday: "Thu", dayOfMonth: "3", strain: nil, recovery: 56),
+    .init(day: "2026-09-04", weekday: "Fri", dayOfMonth: "4", strain: 0.1, recovery: nil),
+    .init(day: "2026-09-05", weekday: "Sat", dayOfMonth: "5", strain: 8.4, recovery: 66),
+    .init(day: "2026-09-06", weekday: "Sun", dayOfMonth: "6", strain: 18.6, recovery: 100),
+  ]
+
   private var charts: some View {
     VStack(alignment: .leading, spacing: 0) {
       HCCSectionHeader(title: "Charts")
+
+      VStack(alignment: .leading, spacing: 8) {
+        HCCLabel("Strain & recovery")
+        // The widest labels the chart can draw, on the two columns that sit
+        // closest to the axis text: a full-width "100%" on day one and a
+        // two-digit strain on the last. Home cannot show this without a week
+        // of live scores, so the fixture is the only way to see the edges.
+        HCCStrainRecoveryChart(points: Self.strainRecoveryFixture)
+      }
+      .hccCard()
 
       VStack(alignment: .leading, spacing: 8) {
         HCCLabel("Bars · banded colour")

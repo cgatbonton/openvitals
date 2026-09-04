@@ -29,11 +29,12 @@ struct HCCHealthView: View {
   var body: some View {
     content
       // HCC: presented rather than pushed. The Health tab's `NavigationStack`
-      // is built by the shell with no path binding (AppShellView.swift:113-117),
-      // so nothing outside a tap can push onto it, and a second stack nested
-      // inside it swallows the landing's own `navigationDestination`s. A cover
-      // reaches the same screen with the same header and the same `dismiss()`
-      // back button; the only visible difference is that it slides up.
+      // is built by the shell, whose path is shell-private `@State` (it exists
+      // so a tab reselect can pop back to the landing), so nothing outside a tap
+      // pushes onto it — and a second stack nested inside it would swallow the
+      // landing's own `navigationDestination`s. A cover reaches the same screen
+      // with the same header and the same `dismiss()` back button; the only
+      // visible difference is that it slides up.
       .fullScreenCover(item: $pushDestination) { target in
         HCCPushDestinationView(target: target, store: store)
       }

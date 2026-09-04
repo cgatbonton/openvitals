@@ -99,7 +99,8 @@ All new code is under `OpenVitals/HCC/`, so an upstream merge touches none of it
   optimal band, z-score bar, three-up stats, buttons, toggle/check/menu rows,
   and the "arrives in a later phase" sheet.
 - `UI/HCCHomeView.swift` + `UI/HCCHomeSections.swift` — cloud Home (`S.home`):
-  the day nav and device pill, the three rings, the insight card, the day's
+  the top bar (sync button, day nav, device pill), the three rings, the insight
+  card, the day's
   activities, tonight's sleep, and the dashboard tiles. Every string on the
   screen is made in `HCCHomeView`'s formatting helpers, so there is one place
   a `--` can be introduced.
@@ -138,6 +139,41 @@ The split, so neither half gets "fixed" by a later pass:
   `HCCLiveCopy.sourceFootnote`'s Bluetooth sentence, `HCCBLEHeartRateSource`,
   and every upstream view outside `HCC/`, which talk about reading a device
   directly over BLE. Do not put a brand name in those.
+
+## The Top Bar
+
+REVISED 2026-09-03 (Chris). The mockup's rule was "top bar = day toggle +
+device pill only", the day nav sitting flush left. It is now three slots:
+
+    [ sync ]        ‹ TODAY ›        [ device pill ]
+
+- The day nav is **centred**, and the centring is structural: `HCCTopBarLayout`
+  gives both side slots `maxWidth: .infinity`, so SwiftUI makes them equal
+  widths and the centre slot lands on the screen's midline. Two `Spacer()`s
+  would only centre it while the two side controls happened to be the same
+  width — and the pill's width changes with the hardware name it shows, so the
+  day label would drift as the device changed. The pill absorbs the difference
+  by truncating; the day label never moves. Put anything new in the bar through
+  that layout rather than adding a spacer.
+- The left slot is `HCCSyncButton` — pull every connected integration NOW,
+  instead of waiting for the box's cron (WHOOP every 3h, the Fitbit pipe twice
+  a day plus a 5-minute strain refresh, the scale twice a day). It posts
+  `/api/mobile/v1/sync`, which fans out server-side and answers per source.
+- The button **shows its own work**: spinner while running, then a check or a
+  warning triangle, plus a one-line note under the bar saying what happened. A
+  sync that ran and wrote nothing is a SUCCESS reading "Synced — nothing new
+  yet" — the single most likely outcome of an impatient tap, and dressing it as
+  a failure would teach the owner to distrust a button that worked. The note
+  clears itself (3s on success, 6s on a problem) so it does not become
+  furniture.
+- The rate limit is the SERVER's, not the button's: one manual sync a minute,
+  because WHOOP and Withings both rotate their refresh token on every use and
+  two refreshes racing is how this account has lost its connection before. The
+  429 comes back as a sentence ("Just synced — try again in 43s") and is shown
+  as-is. Do not add a client-side cooldown that guesses at the same rule.
+- Four states of the bar are in the component gallery
+  (`HCC_DEBUG_OPEN_SCREEN=gallery`, `HCC_DEBUG_GALLERY_ANCHOR=controls`), which
+  is the only way to see them without a signed-in session.
 
 ## Card Spacing Is Stack Spacing
 

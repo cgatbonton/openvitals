@@ -6,6 +6,12 @@ struct AppShellView: View {
   @StateObject private var healthStore = HealthDataStore()
   @StateObject private var moreStore = MoreDataStore()
   @State private var homeSelectedDate = Date()
+  // HCC: the Health tab's stack is bound so tapping the Health tab while inside
+  // Biomarkers/Insights/Genetics/Protocols can pop back to the landing. It is
+  // shell `@State` rather than router state on purpose — nothing outside a tap
+  // pushes onto this stack (a tapped notification uses a cover; see
+  // `HCCHealthView`), and putting it on the router would invite that.
+  @State private var hccHealthPath: [HCCHealthView.Page] = []
   // HCC: `bottomTabs` reads the provider switch. Observing the same key here is
   // what makes the tab bar redraw if the switch changes under a live shell.
   @AppStorage(HCCProviderSettings.storageKey) private var providerRaw = HealthMetricProvider.bridge.rawValue
@@ -93,7 +99,22 @@ struct AppShellView: View {
     // for the Coach by bumping this counter — the shell owns the sheet, so this
     // is where the request is honoured.
     .onChange(of: router.hccCoachRequested) { _, _ in presentCoach() }
+    .onChange(of: router.hccPopToRootRequestID) { _, _ in popSelectedTabToRoot() }
     .onAppear(perform: presentCoachOnLaunchIfRequested)
+  }
+
+  /// Only the tab that is on screen pops — `reselect` fires for the tab the
+  /// owner tapped, which is by definition the selected one, and the other tabs
+  /// keep the stacks they were left in.
+  ///
+  /// Home is absent here because it owns its own path inside `HCCHomeView`,
+  /// which watches the same counter. Journal and Training push nothing.
+  private func popSelectedTabToRoot() {
+    switch router.selectedTab {
+    case .health: hccHealthPath.removeAll()
+    case .more: router.morePath.removeAll()
+    default: break
+    }
   }
 
   // HCC: hidden while the sheet is up — the mockup hides the FAB behind its own
@@ -185,7 +206,7 @@ struct AppShellView: View {
       // share `router.healthPath` — the deep-link pushes belong to Home, which
       // is the stack that registers the `HealthRoute` destinations — so this
       // one keeps its own.
-      NavigationStack {
+      NavigationStack(path: $hccHealthPath) {
         tabContent(for: tab)
       }
     } else if tab == .developer {

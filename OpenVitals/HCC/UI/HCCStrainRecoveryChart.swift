@@ -47,6 +47,15 @@ struct HCCStrainRecoveryChart: View {
   private let insetTrailing: CGFloat = 34
   private let insetTop: CGFloat = 14
   private let insetBottom: CGFloat = 50
+  /// How far the FIRST and LAST columns sit inside the plot.
+  ///
+  /// A point label is centred on its column, so a column on the plot edge put
+  /// its label half outside the plot and straight through the axis text beside
+  /// it — "100%" on day one landed on the strain scale, and on the last day it
+  /// landed on the recovery scale. The gridlines still span the full width;
+  /// only the columns move in. 12 pt clears the widest label the chart can
+  /// draw (a four-character "100%", about 23 pt) with room to spare.
+  private let pointInset: CGFloat = 12
 
   private var innerHeight: CGFloat { chartHeight - insetTop - insetBottom }
 
@@ -88,7 +97,8 @@ struct HCCStrainRecoveryChart: View {
 
   private func x(_ index: Int, innerWidth: CGFloat) -> CGFloat {
     guard points.count > 1 else { return insetLeading + innerWidth / 2 }
-    return insetLeading + CGFloat(index) * (innerWidth / CGFloat(points.count - 1))
+    let span = Swift.max(innerWidth - pointInset * 2, 1)
+    return insetLeading + pointInset + CGFloat(index) * (span / CGFloat(points.count - 1))
   }
 
   private func strainY(_ value: Double) -> CGFloat {

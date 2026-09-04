@@ -13,6 +13,9 @@ final class AppRouter: ObservableObject {
   // HCC: in cloud mode the Coach is a sheet over the current screen, not a tab.
   // Bumping this asks the cloud shell to present it; the shell owns the sheet.
   @Published var hccCoachRequested = 0
+  /// Bumped by `reselect`. Read by the cloud shell and by cloud Home, each of
+  /// which pops its OWN stack and only while it is the selected tab.
+  @Published var hccPopToRootRequestID = 0
 
   // HCC: where a push's deep link wants to land in cloud mode.
   //
@@ -77,6 +80,11 @@ final class AppRouter: ObservableObject {
     }
   }
 
+  /// Tapping the tab you are already on means "take me back to the top of this
+  /// tab" — the standard iOS gesture. Each cloud tab owns its own navigation
+  /// path, so this is a bump rather than a command: the stack that is currently
+  /// on screen clears itself, and the others keep their state, exactly as a
+  /// system `TabView` behaves.
   func reselect(_ tab: OpenVitalsAppTab) {
     switch tab {
     case .coach:
@@ -84,6 +92,7 @@ final class AppRouter: ObservableObject {
     default:
       break
     }
+    hccPopToRootRequestID += 1
   }
 
   @discardableResult

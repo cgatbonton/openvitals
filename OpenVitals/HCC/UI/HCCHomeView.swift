@@ -13,6 +13,9 @@ import SwiftUI
 /// no strain all say so instead of showing a zero.
 struct HCCHomeView: View {
   @ObservedObject var store: HealthDataStore
+  // HCC: only to hear the "tapped the tab I am already on" bump — Home owns its
+  // own path, so the shell cannot pop it from outside.
+  @EnvironmentObject private var router: AppRouter
   /// The day on screen. Owned by the shell so a detail screen and Home agree
   /// about which day is being looked at.
   @Binding var selectedDate: Date
@@ -56,6 +59,14 @@ struct HCCHomeView: View {
     }
     .sheet(item: $sheet) { sheet in
       HCCHomeSheetHost(sheet: sheet, store: store)
+    }
+    // Tapping the Home tab while inside a ring detail goes back to Home. Guarded
+    // on being the selected tab so a reselect elsewhere does not quietly discard
+    // the stack this tab was left in. A presented sheet is untouched, which is
+    // what the system tab bar does too.
+    .onChange(of: router.hccPopToRootRequestID) { _, _ in
+      guard router.selectedTab == .home else { return }
+      path.removeAll()
     }
     .task(id: dayKey) {
       await store.refreshFromHCC(date: selectedDate)

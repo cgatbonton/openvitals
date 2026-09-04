@@ -224,10 +224,24 @@ struct HCCActivityDetailView: View {
 
 /// Slug → words, and the one unit rendering this screen needs.
 enum HCCActivityCopy {
+  /// Sports whose own spelling the de-slugging rule below cannot reach —
+  /// internal capitals and hyphens that a slug throws away. Anything absent
+  /// here still renders; it just renders by the general rule.
+  private static let properNames: [String: String] = [
+    "crossfit": "CrossFit",
+    "brazilian_jiu_jitsu": "Brazilian jiu-jitsu",
+    "jiu_jitsu": "Jiu-jitsu",
+    "bjj": "Brazilian jiu-jitsu",
+    "hiit": "HIIT",
+  ]
+
   /// `assault_bike` → "Assault bike". The server's `type` is free text by
   /// design (every provider ships its own sport list), so this is a
-  /// presentation rule, not a lookup that can miss.
+  /// presentation rule, not a lookup that can miss — `properNames` is an
+  /// override for the handful the rule spells wrong, never a gate.
   static func title(for type: String) -> String {
+    let slug = type.trimmingCharacters(in: .whitespaces).lowercased()
+    if let proper = properNames[slug] { return proper }
     let words = type
       .replacingOccurrences(of: "_", with: " ")
       .trimmingCharacters(in: .whitespaces)
