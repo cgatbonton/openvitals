@@ -55,12 +55,12 @@ struct HCCStrainView: View {
 
   // ── Header ─────────────────────────────────────────────────────────────────
 
-  /// "Aug 25 · band · co-wear" while a wrist is driving the number, "Aug 25 ·
+  /// "Aug 25 · WHOOP · co-wear" while a wrist is driving the number, "Aug 25 ·
   /// computed" once the server's own engine is.
   private var subtitle: String {
     let dayLabel = HealthDataStore.hccDayLabel(day)
     switch score?.origin {
-    case "whoop": return "\(dayLabel) · band · co-wear"
+    case "whoop": return "\(dayLabel) · \(HCCCopy.originLabel("whoop")) · co-wear"
     case "computed": return "\(dayLabel) · computed"
     default: return dayLabel
     }
@@ -104,11 +104,11 @@ struct HCCStrainView: View {
     return "light"
   }
 
-  /// "band" while a wrist is driving the number, "computed" once the server's
+  /// "WHOOP" while a wrist is driving the number, "computed" once the server's
   /// own engine is. Nothing is shown when the server named no origin.
   private var originWord: String? {
     switch score?.origin {
-    case "whoop": "band"
+    case "whoop": HCCCopy.originLabel("whoop")
     case "computed": "computed"
     default: nil
     }
@@ -146,7 +146,7 @@ struct HCCStrainView: View {
           .foregroundStyle(HCCTheme.Color.text)
           .fixedSize()
       }
-      HCCFootnote("Target set from this morning's recovery. Mirrors the band while co-wearing, then switches to the computed value.", size: 11.5)
+      HCCFootnote("Target set from this morning's recovery. Mirrors WHOOP while co-wearing, then switches to the computed value.", size: 11.5)
     }
     .hccCard()
   }

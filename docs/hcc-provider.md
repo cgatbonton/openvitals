@@ -115,11 +115,29 @@ All new code is under `OpenVitals/HCC/`, so an upstream merge touches none of it
 
 ## Copy Rule
 
-No manufacturer name reaches the interface (AGENTS.md). The server's
-`origin: "whoop"` renders as **"band"**; `origin: "computed"` renders as
+`HCCCopy.originLabel` / `HCCCopy.sourceLabel` are the only place device naming
+lives — route new labels through them. `origin: "computed"` renders as
 **"Command Center"**, because that origin means the server's own scoring engine
-and not any particular wrist. `HCCCopy.originLabel` / `HCCCopy.sourceLabel` are
-the only place that mapping lives — route new labels through them.
+and not any particular wrist.
+
+**REVISED 2026-09-03 (Chris).** `origin: "whoop"` / `source: "WHOOP"` now render
+as **"WHOOP"**. They previously rendered as the neutral word **"band"** under
+upstream's rule that no manufacturer name reaches the interface (AGENTS.md).
+That rule guards the reverse-engineered BLE client; on the cloud surface the
+label is only this account's own server saying which instrument produced a
+number, and "Band" sitting next to "Fitbit", "Apple Watch" and "Withings scale"
+read as a missing device rather than a neutral one.
+
+The split, so neither half gets "fixed" by a later pass:
+
+- **Cloud surface (`HCC/**`) names the brand** — devices sheet, home device
+  pill, recovery/strain provenance lines, battery card, and any server sentence
+  passed through `HealthDataStore.hccNeutralCopy` (which is now a spelling
+  normaliser onto `HCCCopy`'s label, not a redaction).
+- **Bridge surface stays neutral** — `HCCProvider`'s onboarding picker,
+  `HCCLiveCopy.sourceFootnote`'s Bluetooth sentence, `HCCBLEHeartRateSource`,
+  and every upstream view outside `HCC/`, which talk about reading a device
+  directly over BLE. Do not put a brand name in those.
 
 ## Card Spacing Is Stack Spacing
 

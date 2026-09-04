@@ -129,9 +129,9 @@ struct HCCHomeView: View {
   private var devicePill: some View {
     let device = store.hccDrivingDevice() ?? store.hcc.devices.first
     return HCCDevicePill(
-      // The server's own label, with any manufacturer token rewritten — the
-      // FITBIT row carries the real hardware name, the WHOOP row carries the
-      // brand, and only one of those may reach the screen.
+      // The server's own label, with the brand token normalised to `HCCCopy`'s
+      // spelling — the FITBIT row carries the real hardware name Google
+      // reports, the WHOOP row carries the brand.
       label: device.flatMap { HealthDataStore.hccNeutralCopy($0.label) },
       batteryPercent: device?.battery?.level,
       stateColor: Self.deviceStateColor(device?.status),

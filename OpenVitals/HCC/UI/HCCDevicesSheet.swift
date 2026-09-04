@@ -137,7 +137,7 @@ struct HCCDevicesSheet: View {
       HCCLabel("Battery availability")
       HCCKeyValueGrid(rows: [
         HCCKeyValue("Fitbit", "Google Health API"),
-        HCCKeyValue("Band", "not exposed"),
+        HCCKeyValue("WHOOP", "not exposed"),
         HCCKeyValue("Apple Watch", "needs Watch app"),
       ])
     }
@@ -170,12 +170,11 @@ struct HCCDevicesSheet: View {
     return parts.isEmpty ? "Connected" : parts.joined(separator: " · ")
   }
 
-  /// The server's `label` is its own text and for the band it is the
-  /// manufacturer's name, which this app does not print (AGENTS.md). Anything
-  /// with a neutral label keeps it.
+  /// The band's row is named by `HCCCopy`, which owns device naming; every
+  /// other source keeps the server's own label (the Fitbit row carries the
+  /// real hardware name Google reports).
   private static func name(for device: HCCDevice) -> String {
-    let neutral = HCCCopy.sourceLabel(device.source)
-    return device.source.uppercased() == "WHOOP" ? neutral.capitalized : device.label
+    device.source.uppercased() == "WHOOP" ? HCCCopy.sourceLabel(device.source) : device.label
   }
 
   private static func glyph(for source: String) -> String {

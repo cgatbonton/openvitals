@@ -63,7 +63,7 @@ struct HCCDayNav: View {
 /// difference — it is the difference between "the battery is empty" and "this
 /// device does not report one", and it is why no percentage is ever guessed.
 struct HCCDevicePill: View {
-  /// Already band-neutral. `nil` when no device is on record.
+  /// Already labelled through `HCCCopy`. `nil` when no device is on record.
   let label: String?
   /// 0–100, or `nil` when the source reports none.
   let batteryPercent: Double?

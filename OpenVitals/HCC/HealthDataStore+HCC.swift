@@ -770,12 +770,13 @@ extension HealthDataStore {
   }
 
   /// `nominal` / `watch` / `alert` as the words the cards already use.
-  /// Server copy, with the manufacturer taken out.
+  /// Server copy, with the brand token normalised to the app's own label.
   ///
   /// The read API names the band in its calibration sentences and in the basis
-  /// line under an optimal range. This fork's interface does not (AGENTS.md),
-  /// so the brand token is rewritten to the neutral label — the sentence itself
-  /// is the honest explanation and is kept word for word otherwise.
+  /// line under an optimal range, spelling it however that sentence was
+  /// written. The token is rewritten to `HCCCopy`'s one label so the screen
+  /// says the same word everywhere; the sentence is kept word for word
+  /// otherwise. (It used to redact the brand — see `HCCCopy`, 2026-09-03.)
   nonisolated static func hccNeutralCopy(_ text: String?) -> String? {
     guard let text else { return nil }
     var out = text

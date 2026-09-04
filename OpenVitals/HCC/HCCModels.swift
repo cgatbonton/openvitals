@@ -86,15 +86,23 @@ enum HCCOrigin: String {
 
 /// User-facing labels for server-side identifiers.
 ///
-/// Central on purpose: the fork's copy rule (AGENTS.md) is that no
-/// manufacturer name reaches the interface, and one mapping function is the
-/// only way to keep that true as screens are added.
+/// Central on purpose: one mapping function is the only way to keep device
+/// naming consistent as screens are added.
+///
+/// DECISION (Chris, 2026-09-03): on the cloud surface the band is named
+/// **"WHOOP"**. The fork previously rendered it as the neutral word "band"
+/// under upstream's copy rule (AGENTS.md: do not imply manufacturer
+/// affiliation); that rule guards the reverse-engineered BLE client, and the
+/// cloud surface is just this account's own server saying which instrument
+/// produced a number. The BRIDGE side — onboarding's provider picker, the
+/// live-HR Bluetooth sentence, and every upstream view outside `HCC/` — stays
+/// neutral. Do not re-neutralise these two functions.
 enum HCCCopy {
   /// `HomeScore.origin` / `MergedScore.origin` → a label.
   static func originLabel(_ origin: String?) -> String {
     switch origin {
     case "computed": "Command Center"
-    case "whoop": "band"
+    case "whoop": "WHOOP"
     default: "device"
     }
   }
@@ -102,7 +110,7 @@ enum HCCCopy {
   /// A `Source` enum value from the server → a label.
   static func sourceLabel(_ source: String?) -> String {
     switch source {
-    case "WHOOP": "band"
+    case "WHOOP": "WHOOP"
     case "FITBIT": "Fitbit"
     case "APPLE_HEALTH": "Apple Health"
     case "WITHINGS": "Withings"

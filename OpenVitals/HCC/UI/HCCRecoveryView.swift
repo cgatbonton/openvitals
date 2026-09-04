@@ -46,20 +46,19 @@ struct HCCRecoveryView: View {
   /// rather than guessed when the server did not say.
   private var subtitle: String {
     var parts = [HealthDataStore.hccDayLabel(day)]
-    // The server's device label names a manufacturer; the fork's copy rule does
-    // not (AGENTS.md), so it goes through the same neutral map as everything
-    // else that comes off the wire.
+    // Both the device label and the origin word go through `HCCCopy`, which
+    // owns device naming, rather than being spelled out here.
     if let device = store.hccDrivingDevice().map({ HCCCopy.sourceLabel($0.source) }), !device.isEmpty {
       parts.append(device)
     }
     switch score?.origin {
     case "computed": parts.append("computed")
-    case "whoop": parts.append("band")
+    case "whoop": parts.append(HCCCopy.originLabel("whoop"))
     default: break
     }
     if score?.stale == true { parts.append("stale") }
-    // The neutral device label and the origin word can both come out as "band";
-    // "Aug 25 · band · band" is noise, not two facts.
+    // The device label and the origin word can both come out as "WHOOP";
+    // "Aug 25 · WHOOP · WHOOP" is noise, not two facts.
     var seen = Set<String>()
     return parts.filter { seen.insert($0.lowercased()).inserted }.joined(separator: " · ")
   }
