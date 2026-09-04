@@ -35,8 +35,8 @@ final class HCCWatchMirrorSource: NSObject, HCCLiveHeartRateSource, @unchecked S
 
   private let healthStore = HKHealthStore()
   private var session: HKWorkoutSession?
-  private var continuation: AsyncStream<HCCHeartRateSample>.Continuation?
-  private let stream: AsyncStream<HCCHeartRateSample>
+  /// One stream per consumer — see `HCCSampleFanout`.
+  private let fanout = HCCSampleFanout()
   private var installed = false
 
   /// The watch's own battery level (0–1) when it reports one. Read by the state
@@ -46,14 +46,7 @@ final class HCCWatchMirrorSource: NSObject, HCCLiveHeartRateSource, @unchecked S
   var onStatusChanged: (@Sendable (String) -> Void)?
   var onBatteryChanged: (@Sendable (Double) -> Void)?
 
-  override init() {
-    var captured: AsyncStream<HCCHeartRateSample>.Continuation?
-    stream = AsyncStream { captured = $0 }
-    continuation = captured
-    super.init()
-  }
-
-  var samples: AsyncStream<HCCHeartRateSample> { stream }
+  var samples: AsyncStream<HCCHeartRateSample> { fanout.stream }
 
   /// Whether a mirrored session is currently attached.
   var isMirroring: Bool { session != nil }
@@ -138,7 +131,7 @@ final class HCCWatchMirrorSource: NSObject, HCCLiveHeartRateSource, @unchecked S
     case "hr":
       guard let bpm = message.bpm, bpm > 0 else { return }
       let at = message.at.map { Date(timeIntervalSince1970: $0) } ?? Date()
-      continuation?.yield(HCCHeartRateSample(at: at, bpm: bpm, activeKcal: pendingKcal))
+      fanout.yield(HCCHeartRateSample(at: at, bpm: bpm, activeKcal: pendingKcal))
     case "kcal":
       guard let value = message.value, value >= 0 else { return }
       // Energy arrives on its own cadence, so it is attached to the next

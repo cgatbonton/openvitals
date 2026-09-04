@@ -78,21 +78,16 @@ final class HCCBLEHeartRateSource: NSObject, HCCLiveHeartRateSource, @unchecked 
   private var central: CBCentralManager?
   private var peripherals: [UUID: CBPeripheral] = [:]
   private var connected: CBPeripheral?
-  private var continuation: AsyncStream<HCCHeartRateSample>.Continuation?
-  private let stream: AsyncStream<HCCHeartRateSample>
+  /// One stream per consumer — see `HCCSampleFanout`. Switching the source
+  /// away and back reads `samples` again, and a single stored stream would be
+  /// spent by then.
+  private let fanout = HCCSampleFanout()
   private var wantsConnection = false
   /// The energy field is cumulative since the sensor last reset, so the first
   /// value read becomes the session's zero.
   private var energyBaselineKJ: Double?
 
-  override init() {
-    var captured: AsyncStream<HCCHeartRateSample>.Continuation?
-    stream = AsyncStream { captured = $0 }
-    continuation = captured
-    super.init()
-  }
-
-  var samples: AsyncStream<HCCHeartRateSample> { stream }
+  var samples: AsyncStream<HCCHeartRateSample> { fanout.stream }
 
   // ── Scanning ───────────────────────────────────────────────────────────────
 
@@ -145,8 +140,7 @@ final class HCCBLEHeartRateSource: NSObject, HCCLiveHeartRateSource, @unchecked 
       central?.cancelPeripheralConnection(connected)
     }
     connected = nil
-    continuation?.finish()
-    continuation = nil
+    fanout.finish()
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────
@@ -356,7 +350,7 @@ extension HCCBLEHeartRateSource: CBPeripheralDelegate {
       energyBaselineKJ = min(baseline, energyKJ)
       kcal = max(0, energyKJ - (energyBaselineKJ ?? energyKJ)) / 4.184
     }
-    continuation?.yield(HCCHeartRateSample(at: Date(), bpm: parsed.bpm, activeKcal: kcal))
+    fanout.yield(HCCHeartRateSample(at: Date(), bpm: parsed.bpm, activeKcal: kcal))
   }
 }
 

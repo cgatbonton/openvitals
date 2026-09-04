@@ -25,6 +25,56 @@ struct HCCHeartRateSample: Equatable {
   var activeKcal: Double?
 }
 
+/// Hands every consumer its own stream of the same readings.
+///
+/// An `AsyncStream` supports exactly ONE iteration for its lifetime. A source
+/// that stores a single stream can therefore be read once and never again: the
+/// second reader waits forever, receives nothing, and no error is raised
+/// anywhere while the device stays connected and keeps sending. That is not a
+/// hypothetical — it is what made the live screen show a dash under a device
+/// reporting "Receiving heart rate.", both on first open and again after
+/// switching sources and back.
+///
+/// So `samples` is a computed property on every source, and each read builds a
+/// new stream registered here. A consumer that goes away takes only its own
+/// registration with it.
+final class HCCSampleFanout: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuations: [UUID: AsyncStream<HCCHeartRateSample>.Continuation] = [:]
+
+  /// A fresh stream for one consumer.
+  var stream: AsyncStream<HCCHeartRateSample> {
+    let id = UUID()
+    return AsyncStream { continuation in
+      lock.lock()
+      continuations[id] = continuation
+      lock.unlock()
+      continuation.onTermination = { [weak self] _ in
+        guard let self else { return }
+        self.lock.lock()
+        self.continuations[id] = nil
+        self.lock.unlock()
+      }
+    }
+  }
+
+  func yield(_ sample: HCCHeartRateSample) {
+    lock.lock()
+    let live = Array(continuations.values)
+    lock.unlock()
+    for continuation in live { continuation.yield(sample) }
+  }
+
+  /// End every stream. The source is done producing.
+  func finish() {
+    lock.lock()
+    let live = Array(continuations.values)
+    continuations.removeAll()
+    lock.unlock()
+    for continuation in live { continuation.finish() }
+  }
+}
+
 /// A thing that streams heart rate for the duration of a workout.
 protocol HCCLiveHeartRateSource: AnyObject {
   /// What the screen calls it. Device-neutral copy — no manufacturer names
@@ -117,21 +167,14 @@ final class HCCDebugHeartRateSource: HCCLiveHeartRateSource, @unchecked Sendable
 
   let label = "Simulated source"
 
-  private var continuation: AsyncStream<HCCHeartRateSample>.Continuation?
+  private let fanout = HCCSampleFanout()
   private var task: Task<Void, Never>?
-  private let stream: AsyncStream<HCCHeartRateSample>
 
-  init() {
-    var captured: AsyncStream<HCCHeartRateSample>.Continuation?
-    stream = AsyncStream { captured = $0 }
-    continuation = captured
-  }
-
-  var samples: AsyncStream<HCCHeartRateSample> { stream }
+  var samples: AsyncStream<HCCHeartRateSample> { fanout.stream }
 
   func start() async throws {
     guard task == nil else { return }
-    let continuation = self.continuation
+    let fanout = self.fanout
     task = Task.detached { [weak self] in
       // The ramp: 60 bpm at rest climbing to about 165 over five minutes, then
       // holding with a slow wander. Noise is deterministic (a sine beat, not a
@@ -147,7 +190,7 @@ final class HCCDebugHeartRateSource: HCCLiveHeartRateSource, @unchecked Sendable
         // Roughly 8–14 kcal a minute as the heart rate climbs — an accrual, not
         // a physiological claim; the source is synthetic and says so.
         kcal += (6 + ramp * 8) / 60
-        continuation?.yield(HCCHeartRateSample(at: Date(), bpm: bpm, activeKcal: kcal))
+        fanout.yield(HCCHeartRateSample(at: Date(), bpm: bpm, activeKcal: kcal))
         tick += 1
         do { try await Task.sleep(for: .seconds(1)) } catch { break }
       }
@@ -158,8 +201,7 @@ final class HCCDebugHeartRateSource: HCCLiveHeartRateSource, @unchecked Sendable
   func stop() {
     task?.cancel()
     task = nil
-    continuation?.finish()
-    continuation = nil
+    fanout.finish()
   }
 }
 #endif

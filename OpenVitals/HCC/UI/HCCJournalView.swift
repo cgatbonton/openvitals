@@ -171,10 +171,46 @@ private struct HCCJournalScreen: View {
         value: Int((entry?.valueNum ?? 0).rounded()),
         isAnswered: entry?.valueNum != nil,
         showsDivider: showsDivider,
-        onChange: { write(behavior, valueBool: nil, valueNum: Double($0)) },
+        onChange: { count in
+          write(behavior, valueBool: nil, valueNum: Double(count))
+          answerCompanion(of: behavior, day: day, count: count)
+        },
         onClear: { write(behavior, valueBool: nil, valueNum: nil) }
       )
     }
+  }
+
+  /// Saying you had 2 drinks has already answered "did you drink" — so the
+  /// count answers the yes/no beside it rather than leaving a contradiction on
+  /// screen (2 units, alcohol unanswered).
+  ///
+  /// Paired by slug: a NUMBER behavior `<base>_units` belongs to the BOOLEAN
+  /// `<base>`. There is no link column on `JournalBehavior` to read, and a
+  /// convention that fails to match simply pairs nothing — the count is still
+  /// written, so a rename can never lose an answer.
+  ///
+  /// One direction only. A count above zero turns the yes/no ON; going back to
+  /// zero does NOT turn it off, because "0 units" and "did not drink" are not
+  /// the same claim and this app does not overwrite an answer the owner gave.
+  /// Clearing stays the long press on the row itself.
+  private func answerCompanion(of behavior: HCCJournalBehavior, day: HCCJournalDay, count: Int) {
+    guard count > 0,
+          let base = Self.companionSlug(of: behavior.slug),
+          let companion = day.visibleBehaviors.first(where: {
+            $0.slug == base && $0.kind == .boolean
+          }),
+          day.entry(behaviorId: companion.id)?.valueBool != true
+    else { return }
+    write(companion, valueBool: true, valueNum: nil)
+  }
+
+  /// `alcohol_units` → `alcohol`. Nil when the slug carries no count suffix.
+  static func companionSlug(of slug: String) -> String? {
+    for suffix in ["_units", "_count", "_minutes"] where slug.hasSuffix(suffix) {
+      let base = String(slug.dropLast(suffix.count))
+      return base.isEmpty ? nil : base
+    }
+    return nil
   }
 
   /// Nil entry, or an entry whose boolean was cleared, is UNANSWERED — never a
