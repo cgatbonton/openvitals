@@ -369,17 +369,18 @@ replayed POST would log a second dose.
 | `HCC_DEBUG_JOURNAL_ANCHOR=impactsOnly` | Draws the impact card **alone**, so it can be screenshotted — see the caveat below |
 | `HCC_DEBUG_SAVE=1` | On the Journal: answers the first two yes/no behaviors (one yes, one no) and logs the first due dose, through the same store writes a tap goes through. Same warning as the Alarm and Customize sheets — it MUTATES SERVER STATE. |
 
-### Known: The Cloud Shell's Bottom Inset Does Not Reach `HCCScreen`
+### The Tab Bar Is Laid Out Under Each Tab, Not As A Safe-Area Inset
 
-`AppShellView.cloudShell` mounts `HCCTabBar` in a `.safeAreaInset(edge: .bottom)`
-on the `TabView`, whose comment says that is "what keeps a scrolling screen's
-last row clear of it without a magic number". On the simulator it does not reach
-the `ScrollView` inside `HCCScreen`: at maximum scroll the last ~85 pt of content
-still sits under the tab bar. On the Journal that hides the whole impact grid and
-its footnote, which is why `impactsOnly` exists. It is a shell-level issue, not a
-Journal one — every scrolling cloud screen ends the same way — and it is
-unfixed. Reproduce with
-`HCC_DEBUG_OPEN_TAB=journal HCC_DEBUG_JOURNAL_ANCHOR=impacts`.
+`AppShellView.cloudShell` used to mount `HCCTabBar` in a
+`.safeAreaInset(edge: .bottom)` on the `TabView`. That inset never reached the
+`ScrollView` inside `HCCScreen`: at maximum scroll the last ~85 pt of every
+cloud screen sat under the bar, hiding the Journal's whole impact grid and
+More's sign-out row. Moving the inset onto each tab's own stack did not fix it
+either. The bar is now a plain sibling in a `VStack` below each tab's stack,
+which bounds the scroll view above it for certain.
+
+Verify with `HCC_DEBUG_SCROLL_BOTTOM=1`, which scrolls any `HCCScreen` to its
+last card a few seconds after it appears.
 
 ## The Training Tab
 
