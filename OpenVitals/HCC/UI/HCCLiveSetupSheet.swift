@@ -75,7 +75,8 @@ struct HCCLiveSetupSheet: View {
       #endif
     }
     .onChange(of: state.sourceKind) { _, kind in
-      if kind == .bluetooth { state.startBluetoothScan() } else { state.stopBluetoothScan() }
+      if kind != .bluetooth { state.stopBluetoothScan() }
+      state.startPreview()
     }
     .fullScreenCover(isPresented: $isLive, onDismiss: closeIfFinished) {
       HCCLiveActivityView(store: store)
@@ -101,13 +102,23 @@ struct HCCLiveSetupSheet: View {
           .font(HCCTheme.Font.body(size: 13, weight: .medium))
           .foregroundStyle(HCCTheme.Color.muted)
       }
-      Text(state.sourceStatus ?? "Looking for \(state.sourceKind.label)...")
+      Text(previewStatus)
         .font(HCCTheme.Font.body(size: 11.5))
         .foregroundStyle(HCCTheme.Color.muted)
         .multilineTextAlignment(.center)
     }
     .frame(maxWidth: .infinity)
     .hccCard()
+  }
+
+  /// What the reading is doing. A source that has said something for itself
+  /// says it; otherwise this reports whether readings are arriving, which is
+  /// the one thing the number alone cannot say once it has gone stale.
+  private var previewStatus: String {
+    if let status = state.sourceStatus { return status }
+    return state.previewBpm == nil
+      ? "Looking for \(state.sourceKind.label)..."
+      : "Live from \(state.sourceKind.label)."
   }
 
   private var fields: some View {

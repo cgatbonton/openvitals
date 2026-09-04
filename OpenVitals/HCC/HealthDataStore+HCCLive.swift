@@ -70,6 +70,11 @@ final class HCCLiveState: ObservableObject {
   /// only way to find out was to start a session and hope.
   @Published private(set) var previewBpm: Int?
   private var previewTask: Task<Void, Never>?
+  private var previewStaleTask: Task<Void, Never>?
+  /// How long a preview reading stands after the last sample. A device that
+  /// walks out of range stops sending without saying so, and a number still on
+  /// screen a minute later is a reading nobody is taking.
+  private static let previewStaleAfter: TimeInterval = 12
   /// 0-based, matching the server's zone indices.
   @Published private(set) var currentZone: Int?
   @Published private(set) var zoneMs: [Double] = Array(repeating: 0, count: HCCZones.zoneCount)
@@ -275,7 +280,7 @@ extension HCCLiveState {
     #if DEBUG
     if HCCDebugHeartRateSource.isRequested, sourceKind != .debug { sourceKind = .debug }
     #endif
-    if sourceKind == .bluetooth { startBluetoothScan() }
+    startPreview()
   }
 
   /// Point the live source at whatever the selected device can actually
@@ -292,7 +297,7 @@ extension HCCLiveState {
     // decides the source most of the time. `beginSetup` has already run its own
     // scan check by then; without starting one here the screen sat waiting for
     // a device nothing was looking for.
-    if phase == .setup, streaming == .bluetooth { startBluetoothScan() }
+    if phase == .setup { startPreview() }
   }
 
   func adopt(zoneConfig: HCCZoneConfig?, restingHr: Double?) {
@@ -307,6 +312,60 @@ extension HCCLiveState {
   }
 
   /// Scan for Bluetooth heart-rate devices while the picker is open.
+  /// Show a reading before anything is being recorded.
+  ///
+  /// Only for sources that can stream outside a session: a Bluetooth device is
+  /// connectable any time, and the debug generator always runs. The watch
+  /// cannot — it streams from a workout session the watch itself starts — so
+  /// its preview stays a dash and the status line says what it is waiting for.
+  func startPreview() {
+    switch sourceKind {
+    case .bluetooth:
+      startBluetoothScan()
+    #if DEBUG
+    case .debug:
+      previewFrom(HCCDebugHeartRateSource())
+    #endif
+    default:
+      stopPreview()
+    }
+  }
+
+  func stopPreview() {
+    previewTask?.cancel()
+    previewTask = nil
+    previewStaleTask?.cancel()
+    previewStaleTask = nil
+    previewBpm = nil
+  }
+
+  /// Drop the preview reading if the next sample does not arrive in time.
+  private func armPreviewStaleness() {
+    previewStaleTask?.cancel()
+    previewStaleTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(Self.previewStaleAfter))
+      guard !Task.isCancelled else { return }
+      await MainActor.run { self?.previewBpm = nil }
+    }
+  }
+
+  /// Drain a source into the preview only. Never touches the accumulator, so a
+  /// reading taken while deciding cannot land in the session's zone time.
+  private func previewFrom(_ source: HCCLiveHeartRateSource) {
+    previewTask?.cancel()
+    previewTask = Task { [weak self] in
+      try? await source.start()
+      for await sample in source.samples {
+        guard let self else { return }
+        await MainActor.run {
+          guard !self.isLive else { return }
+          self.previewBpm = sample.bpm
+          self.armPreviewStaleness()
+        }
+      }
+    }
+  }
+
   func startBluetoothScan() {
     let ble = bluetoothSource()
     ble.onDevicesChanged = { [weak self] devices in
@@ -319,17 +378,7 @@ extension HCCLiveState {
     // Scanning alone only lists devices. Connecting is what produces a reading,
     // and the reading is the whole point of the screen — so setup connects too,
     // and hands the samples to the preview rather than to the accumulator.
-    previewTask?.cancel()
-    previewTask = Task { [weak self] in
-      try? await ble.start()
-      for await sample in ble.samples {
-        guard let self else { return }
-        await MainActor.run {
-          guard !self.isLive else { return }
-          self.previewBpm = sample.bpm
-        }
-      }
-    }
+    previewFrom(ble)
   }
 
   func stopBluetoothScan() {
@@ -342,6 +391,8 @@ extension HCCLiveState {
     // session's own drain takes over, or readings alternate between them.
     previewTask?.cancel()
     previewTask = nil
+    previewStaleTask?.cancel()
+    previewStaleTask = nil
     previewBpm = nil
     lastError = nil
     let source = makeSource()
