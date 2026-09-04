@@ -12,6 +12,10 @@ struct HCCBiomarkersView: View {
   @ObservedObject var store: HealthDataStore
   @StateObject private var load = HCCPageLoad<HCCBiomarkerPanels>()
 
+  /// The row whose detail sheet is open. The web shows this content on hover;
+  /// a phone has no hover, so the same card is presented off a tap.
+  @State private var selected: HCCMetricView?
+
   var body: some View {
     HCCScreen {
       HCCDetailHeader(title: "Biomarkers", subtitle: subtitle)
@@ -24,7 +28,10 @@ struct HCCBiomarkersView: View {
           ForEach(panels.panels) { panel in
             panelCard(panel)
           }
-          HCCFootnote("Targets are the optimal targets from your metric catalog, not lab reference ranges.")
+          HCCFootnote(
+            "Tap a marker for its insight and how the number compares. Targets are the optimal "
+              + "targets from your metric catalog, not lab reference ranges."
+          )
         }
       } else if let error = load.errorText {
         HCCErrorNote(error) { await load.reload { try await HCCSession.shared.client.biomarkers() } }
@@ -32,9 +39,28 @@ struct HCCBiomarkersView: View {
         HCCLoadingNote().hccCard()
       }
     }
+    .sheet(item: $selected) { metric in
+      HCCBiomarkerDetailSheet(metric: metric)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(HCCTheme.Color.bg)
+    }
     .task {
       await load.loadIfNeeded { try await HCCSession.shared.client.biomarkers() }
+      openRequestedBiomarker()
     }
+  }
+
+  /// DEBUG only. `HCC_DEBUG_OPEN_BIOMARKER=<slug>` presents that row's detail
+  /// sheet once the panels have loaded. `simctl` cannot tap, so this is the only
+  /// way a scripted run can screenshot where the tap lands.
+  private func openRequestedBiomarker() {
+    #if DEBUG
+    guard let slug = ProcessInfo.processInfo.environment["HCC_DEBUG_OPEN_BIOMARKER"], !slug.isEmpty,
+          let metric = load.value?.panels.flatMap(\.metrics).first(where: { $0.slug == slug })
+    else { return }
+    selected = metric
+    #endif
   }
 
   private var subtitle: String {
@@ -53,7 +79,9 @@ struct HCCBiomarkersView: View {
     VStack(alignment: .leading, spacing: 6) {
       HCCLabel(Self.categoryTitle(panel.category), size: 11)
       ForEach(Array(panel.metrics.enumerated()), id: \.element.slug) { index, metric in
-        BiomarkerRow(metric: metric, showsDivider: index < panel.metrics.count - 1)
+        BiomarkerRow(metric: metric, showsDivider: index < panel.metrics.count - 1) {
+          selected = metric
+        }
       }
     }
     .hccCard()
@@ -70,35 +98,50 @@ struct HCCBiomarkersView: View {
 
 // ── Row ──────────────────────────────────────────────────────────────────────
 
-/// `.bio` — status dot, name, value, optimal target.
+/// `.bio` — status dot, name, value, optimal target. Tapping it opens the same
+/// card the web app shows on hover (`HCCBiomarkerDetailSheet`).
 private struct BiomarkerRow: View {
   let metric: HCCMetricView
   let showsDivider: Bool
+  let onTap: () -> Void
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 10) {
-        Circle()
-          .fill(Self.dotColor(metric.status))
-          .frame(width: 8, height: 8)
-
-        Text(metric.displayName)
-          .font(HCCTheme.Font.body(size: 12.5))
-          .foregroundStyle(HCCTheme.Color.text)
-          .lineLimit(2)
-
-        Spacer(minLength: 8)
-
-        valueText
-
-        Text(Self.targetText(metric))
-          .font(HCCTheme.Font.data(size: 10))
-          .foregroundStyle(HCCTheme.Color.muted)
-          .frame(minWidth: 56, alignment: .trailing)
-      }
-      .padding(.vertical, 7)
+      Button(action: onTap) { rowContent }
+        .buttonStyle(.plain)
       if showsDivider { HCCDivider() }
     }
+  }
+
+  private var rowContent: some View {
+    HStack(spacing: 10) {
+      Circle()
+        .fill(Self.dotColor(metric.status))
+        .frame(width: 8, height: 8)
+
+      Text(metric.displayName)
+        .font(HCCTheme.Font.body(size: 12.5))
+        .foregroundStyle(HCCTheme.Color.text)
+        .lineLimit(2)
+
+      Spacer(minLength: 8)
+
+      valueText
+
+      Text(Self.targetText(metric))
+        .font(HCCTheme.Font.data(size: 10))
+        .foregroundStyle(HCCTheme.Color.muted)
+        .frame(minWidth: 56, alignment: .trailing)
+
+      Text("\u{203A}")
+        .font(HCCTheme.Font.body(size: 13))
+        .foregroundStyle(HCCTheme.Color.muted)
+    }
+    .padding(.vertical, 7)
+    // The whole row is the target, not just the glyphs in it: the gaps between
+    // name, value and target are the widest part of the row and a tap that
+    // lands in one must still open the card.
+    .contentShape(Rectangle())
   }
 
   /// The number, with its unit trailing in the muted micro size the mockup uses

@@ -37,6 +37,7 @@ struct HCCComponentGallery: View {
   @State private var checkOn = true
   @State private var checkOff = false
   @State private var comingSoon = false
+  @State private var biomarkerDetail: HCCMetricView?
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -48,6 +49,7 @@ struct HCCComponentGallery: View {
           charts.id("charts")
           rowsAndGrids.id("rows")
           controls.id("controls")
+          biomarkerDetailSection.id("biomarker")
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 32)
@@ -55,6 +57,8 @@ struct HCCComponentGallery: View {
       .onAppear {
         guard let anchor = Self.requestedAnchor else { return }
         proxy.scrollTo(anchor, anchor: .top)
+        // `simctl` cannot tap, so the one anchor that names a sheet opens it.
+        if anchor == "biomarker" { biomarkerDetail = Self.sampleMetric }
       }
     }
     .scrollIndicators(.hidden)
@@ -62,9 +66,51 @@ struct HCCComponentGallery: View {
     .sheet(isPresented: $comingSoon) {
       HCCComingSoonSheet(feature: "Coach")
     }
+    .sheet(item: $biomarkerDetail) { metric in
+      HCCBiomarkerDetailSheet(metric: metric)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(HCCTheme.Color.bg)
+    }
   }
 
   // ── Sections ───────────────────────────────────────────────────────────────
+
+  /// The card a biomarker row opens — the phone's stand-in for the web app's
+  /// hover tooltip. Presented from here so it can be screenshotted without a
+  /// signed-in instance; the numbers are fake, like everything else on this page.
+  private var biomarkerDetailSection: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HCCSectionHeader(title: "Biomarker detail")
+      HCCButtonRow(
+        primary: HCCButtonSpec(title: "Open detail sheet") { biomarkerDetail = Self.sampleMetric }
+      )
+      .padding(.bottom, 12)
+    }
+  }
+
+  /// Obviously fake, and it never leaves this file.
+  private static let sampleMetric = HCCMetricView(
+    slug: "sample-marker",
+    displayName: "Sample Marker",
+    category: "METABOLIC",
+    unit: "mg/dL",
+    value: 123.0,
+    optimalDir: "LOWER_IS_BETTER",
+    status: "watch",
+    n: 4,
+    lastTestedISO: "2020-01-02T00:00:00.000Z",
+    ageText: "3 mo ago",
+    summary: "A made-up marker that exists only in this gallery, so the card can be "
+      + "screenshotted without a signed-in instance.",
+    optimalLow: nil,
+    optimalHigh: 100,
+    comparison: "23 above the optimal ceiling",
+    trend: "Up 8 since the previous reading",
+    aiInsight: "**Sample insight.** This paragraph stands in for the personalized read the "
+      + "server writes, so the markdown rendering and the accent card can be checked.",
+    insightStale: true
+  )
 
   private var header: some View {
     VStack(alignment: .leading, spacing: 4) {

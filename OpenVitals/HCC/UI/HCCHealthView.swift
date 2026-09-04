@@ -119,6 +119,11 @@ struct HCCHealthLanding: View {
   @StateObject private var genetics = HCCPageLoad<HCCGenetics>()
   @StateObject private var protocolList = HCCPageLoad<HCCProtocolsResponse>()
 
+  /// The key vital whose detail sheet is open — the same card the Biomarkers
+  /// screen opens, and the same content the web app shows when one of its
+  /// key-vitals tiles is hovered.
+  @State private var selectedVital: HCCMetricView?
+
   init(store: HealthDataStore) {
     self.store = store
   }
@@ -134,6 +139,12 @@ struct HCCHealthLanding: View {
       keyVitals
       monitor
       activeInsights
+    }
+    .sheet(item: $selectedVital) { metric in
+      HCCBiomarkerDetailSheet(metric: metric)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(HCCTheme.Color.bg)
     }
     .navigationDestination(for: Page.self) { page in
       switch page {
@@ -232,10 +243,15 @@ struct HCCHealthLanding: View {
         } else {
           VStack(spacing: 0) {
             ForEach(Array(vitals.enumerated()), id: \.element.id) { index, metric in
-              KeyVitalRow(metric: metric, showsDivider: index < vitals.count - 1)
+              KeyVitalRow(metric: metric, showsDivider: index < vitals.count - 1) {
+                selectedVital = metric
+              }
             }
           }
-          HCCFootnote("Graded against the optimal targets in your metric catalog, not lab reference ranges.")
+          HCCFootnote(
+            "Tap a vital for its insight and how the number compares. Graded against the optimal "
+              + "targets in your metric catalog, not lab reference ranges."
+          )
             .padding(.top, 8)
         }
       } else {
@@ -432,39 +448,52 @@ private struct MonitorRow: View {
 private struct KeyVitalRow: View {
   let metric: HCCMetricView
   let showsDivider: Bool
+  let onTap: () -> Void
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 10) {
-        HCCStatusDot(status: metric.status, size: 8)
-
-        Text(metric.displayName)
-          .font(HCCTheme.Font.body(size: 12.5))
-          .foregroundStyle(HCCTheme.Color.text)
-          .lineLimit(2)
-
-        Spacer(minLength: 8)
-
-        HStack(alignment: .firstTextBaseline, spacing: 3) {
-          Text(metric.value.map { HCCFormat.decimal($0, abs($0) >= 100 ? 0 : 1) } ?? HCCFormat.placeholder)
-            .font(HCCTheme.Font.data(size: 12.5))
-            .monospacedDigit()
-            .foregroundStyle(HCCTheme.Color.text)
-          if let unit = metric.unit, !unit.isEmpty, metric.value != nil {
-            Text(unit)
-              .font(HCCTheme.Font.data(size: 9.5))
-              .foregroundStyle(HCCTheme.Color.muted)
-          }
-        }
-
-        Text(metric.ageText)
-          .font(HCCTheme.Font.data(size: 10))
-          .foregroundStyle(HCCTheme.Color.muted)
-          .frame(minWidth: 56, alignment: .trailing)
-      }
-      .padding(.vertical, 7)
+      Button(action: onTap) { rowContent }
+        .buttonStyle(.plain)
       if showsDivider { HCCDivider() }
     }
+  }
+
+  private var rowContent: some View {
+    HStack(spacing: 10) {
+      HCCStatusDot(status: metric.status, size: 8)
+
+      Text(metric.displayName)
+        .font(HCCTheme.Font.body(size: 12.5))
+        .foregroundStyle(HCCTheme.Color.text)
+        .lineLimit(2)
+
+      Spacer(minLength: 8)
+
+      HStack(alignment: .firstTextBaseline, spacing: 3) {
+        Text(metric.value.map { HCCFormat.decimal($0, abs($0) >= 100 ? 0 : 1) } ?? HCCFormat.placeholder)
+          .font(HCCTheme.Font.data(size: 12.5))
+          .monospacedDigit()
+          .foregroundStyle(HCCTheme.Color.text)
+        if let unit = metric.unit, !unit.isEmpty, metric.value != nil {
+          Text(unit)
+            .font(HCCTheme.Font.data(size: 9.5))
+            .foregroundStyle(HCCTheme.Color.muted)
+        }
+      }
+
+      Text(metric.ageText)
+        .font(HCCTheme.Font.data(size: 10))
+        .foregroundStyle(HCCTheme.Color.muted)
+        .frame(minWidth: 56, alignment: .trailing)
+
+      Text("\u{203A}")
+        .font(HCCTheme.Font.body(size: 13))
+        .foregroundStyle(HCCTheme.Color.muted)
+    }
+    .padding(.vertical, 7)
+    // The gaps between name, value and age are the widest part of the row; a
+    // tap landing in one must still open the card.
+    .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
   }
 }
