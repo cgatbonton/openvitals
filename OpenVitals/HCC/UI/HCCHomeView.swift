@@ -111,19 +111,13 @@ struct HCCHomeView: View {
 
   // ── Top bar ────────────────────────────────────────────────────────────────
 
-  /// Sync on the left, the day in the MIDDLE, the device on the right.
-  ///
-  /// The two side controls take `maxWidth: .infinity`, which makes SwiftUI give
-  /// them equal widths and so centres the day nav for real — a plain
-  /// `Spacer()` on either side would only centre it while the two controls
-  /// happened to be the same width, and the device pill's width changes with
-  /// the hardware name it is showing. The pill absorbs the difference by
-  /// truncating (it is already `lineLimit(1)`); the day label never moves.
+  /// Sync on the left, the day in the MIDDLE, the device on the right. The
+  /// centring rule itself lives in `HCCTopBarLayout`.
   private var topBar: some View {
     VStack(alignment: .leading, spacing: 6) {
-      HStack(spacing: 8) {
+      HCCTopBarLayout {
         syncButton
-          .frame(maxWidth: .infinity, alignment: .leading)
+      } center: {
         HCCDayNav(
           label: dayLabel,
           canGoBack: true,
@@ -131,9 +125,8 @@ struct HCCHomeView: View {
           goBack: { step(days: -1) },
           goForward: { step(days: 1) }
         )
-        .fixedSize()
+      } trailing: {
         devicePill
-          .frame(maxWidth: .infinity, alignment: .trailing)
       }
       syncNote
     }
@@ -419,11 +412,19 @@ struct HCCHomeView: View {
 
   // ── Tonight ────────────────────────────────────────────────────────────────
 
+  /// DECISION (Chris, 2026-09-03): the alarm is OFF this card. It used to show
+  /// the wake time, its on/off state and an "Edit alarm" button, and the whole
+  /// card opened the alarm sheet. The alarm can only ever ring on this iPhone —
+  /// no wearable exposes a way to set one (see the note in `HCCAlarmSheet`) —
+  /// so it does not earn a permanent place on Home. The sheet is still reachable
+  /// from Sleep detail and from More.
+  ///
+  /// What stays is the recommended bedtime, which is a different fact: the
+  /// server sizing tonight against the sleep need it has measured.
   private var tonightCard: some View {
     let plan = store.hcc.sleepPlan
-    let alarm = store.hcc.alarm
     return Button {
-      sheet = .alarm
+      path.append(HCCHomeRoute.sleep(day: dayKey))
     } label: {
       VStack(alignment: .leading, spacing: 0) {
         HStack {
@@ -431,14 +432,10 @@ struct HCCHomeView: View {
           Spacer(minLength: 8)
           Text("›").foregroundStyle(HCCTheme.Color.muted)
         }
-        HCCTonightSleepGrid(
+        HCCTonightSleepCard(
           bedtime: Self.clockText(plan?.recommendedBedtime, zone: instanceZone),
-          alarmTime: alarm.map { Self.alarmClock($0.time) } ?? "--",
-          alarmState: alarm.map { $0.on ? "● Alarm on" : "Alarm off" } ?? "No alarm set",
-          alarmIsOn: alarm?.on ?? false,
-          alarmMode: alarm.map { $0.mode == "exact" ? "exact time" : "by sleep goal" } ?? "--"
+          need: plan?.needH.map { HCCWallClock.duration(minutes: $0 * 60) }
         )
-        HCCButtonRow(secondary: HCCButtonSpec(title: "✎ Edit alarm") { sheet = .alarm })
       }
       .hccCard()
       .contentShape(RoundedRectangle(cornerRadius: HCCTheme.Radius.card, style: .continuous))
@@ -748,21 +745,6 @@ extension HCCHomeView {
     return formatter.string(from: date)
   }
 
-  /// The alarm's `HH:MM` wall clock, which the server already states in the
-  /// instance's timezone. It is re-rendered in the reader's 12/24-hour
-  /// preference and NOT converted between zones — converting it would move an
-  /// alarm the server did not move.
-  static func alarmClock(_ time: String) -> String {
-    let parts = time.split(separator: ":")
-    guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]),
-          let date = Calendar.current.date(
-            from: DateComponents(year: 2000, month: 1, day: 1, hour: hour, minute: minute)
-          )
-    else {
-      return time
-    }
-    return date.formatted(date: .omitted, time: .shortened)
-  }
 
   /// SF Symbols for the sport slugs the server ships. The mockup draws these as
   /// emoji; symbols keep one icon language with the tab bar and the rows, and

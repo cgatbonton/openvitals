@@ -279,6 +279,22 @@ struct HCCComponentGallery: View {
     VStack(alignment: .leading, spacing: 0) {
       HCCSectionHeader(title: "Controls")
 
+      // The Home top bar, in every state its sync button has. Here rather than
+      // only on Home because Home needs a signed-in session and a reachable
+      // instance before it will draw anything, and this arrangement — where the
+      // day label sits, what the button does while it works — has to be
+      // checkable against the design without either.
+      VStack(alignment: .leading, spacing: 8) {
+        topBarSample(isRunning: false, outcome: nil)
+        topBarSample(isRunning: true, outcome: nil)
+        topBarSample(isRunning: false, outcome: true)
+        topBarSample(isRunning: false, outcome: false)
+        Text("Synced — nothing new yet.")
+          .font(HCCTheme.Font.body(size: 11.5))
+          .foregroundStyle(HCCTheme.Color.muted)
+      }
+      .padding(.bottom, 14)
+
       VStack(alignment: .leading, spacing: 0) {
         HCCToggleRow(title: "Smart wake window", isOn: $toggleOn)
         HCCToggleRow(title: "Watch haptic", isOn: $toggleOff, showsDivider: false)
@@ -299,6 +315,19 @@ struct HCCComponentGallery: View {
         primary: HCCButtonSpec(title: "Disabled primary", isEnabled: false) {},
         secondary: HCCButtonSpec(title: "Coming soon sheet") { comingSoon = true }
       )
+    }
+  }
+
+  /// One top bar with the real components, so the centring is measured rather
+  /// than mocked. The device label is deliberately a long one — that is the
+  /// case where a naive layout would push the day label off the midline.
+  private func topBarSample(isRunning: Bool, outcome: Bool?) -> some View {
+    HCCTopBarLayout {
+      HCCSyncButton(isRunning: isRunning, outcome: outcome) {}
+    } center: {
+      HCCDayNav(label: "Today", canGoBack: true, canGoForward: false, goBack: {}, goForward: {})
+    } trailing: {
+      HCCDevicePill(label: "Fitbit Air", batteryPercent: 82, stateColor: HCCTheme.Color.good) {}
     }
   }
 }

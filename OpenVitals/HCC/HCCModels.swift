@@ -165,6 +165,11 @@ indirect enum HCCJSONValue: Decodable {
     return nil
   }
 
+  var arrayValue: [HCCJSONValue]? {
+    if case let .array(values) = self { return values }
+    return nil
+  }
+
   subscript(key: String) -> HCCJSONValue? {
     if case let .object(fields) = self { return fields[key] }
     return nil
@@ -506,9 +511,16 @@ struct HCCInsightCard: Decodable, Identifiable {
   let summary: String
   /// Markdown, when the card has a long form.
   let body: String?
+  /// Markdown: what is being done about it, shown as "The plan" — the same
+  /// block the web page renders. Null when none was recorded.
+  let plan: String?
+  /// Markdown: the "why", tied to a data signal. Behind the detail disclosure.
+  let reasoning: String?
+  /// How it actually turned out, once a card is closed out.
+  let outcome: String?
   /// `INFO` | `LOW` | `MEDIUM` | `HIGH` | `CRITICAL`.
   let severity: String
-  /// `ACTIVE` | `ACKNOWLEDGED` | `DISMISSED`.
+  /// `ACTIVE` | `ACKNOWLEDGED` | `DISMISSED` | `RESOLVED`.
   let status: String
   let evidenceGrade: String?
   let relatedMetricSlugs: [String]

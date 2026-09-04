@@ -55,6 +55,30 @@ struct HCCDayNav: View {
   }
 }
 
+/// The top bar's three slots: a control on each side, the day nav genuinely
+/// centred between them.
+///
+/// The side slots take `maxWidth: .infinity`, which makes SwiftUI give them
+/// equal widths and so puts the centre slot on the screen's midline. A plain
+/// `Spacer()` on either side would only centre it while the two controls
+/// happened to be the same width — and the device pill's width changes with the
+/// hardware name it is showing, so the day label would drift as the name
+/// changed. The pill absorbs the difference by truncating (it is already
+/// `lineLimit(1)`); the day label never moves.
+struct HCCTopBarLayout<Leading: View, Center: View, Trailing: View>: View {
+  @ViewBuilder let leading: Leading
+  @ViewBuilder let center: Center
+  @ViewBuilder let trailing: Trailing
+
+  var body: some View {
+    HStack(spacing: 8) {
+      leading.frame(maxWidth: .infinity, alignment: .leading)
+      center.fixedSize()
+      trailing.frame(maxWidth: .infinity, alignment: .trailing)
+    }
+  }
+}
+
 /// The top bar's left control: pull every connected integration now.
 ///
 /// The box's cron is the normal path (WHOOP every 3h, the Fitbit pipe twice a
@@ -345,15 +369,16 @@ struct HCCActivityRow: View {
 
 // ── Tonight's sleep ──────────────────────────────────────────────────────────
 
-/// `.sleep2` — recommended bedtime, a dashed span, and the alarm.
-struct HCCTonightSleepGrid: View {
+/// `.sleep2` — the recommended bedtime, and what the server sized it against.
+///
+/// The mockup's second column was the alarm; it was removed 2026-09-03 (see
+/// `HCCHomeView.tonightCard`) because the alarm can only ring on the phone and
+/// does not earn a place on Home. Do not re-add it without a wearable that can
+/// actually hold one.
+struct HCCTonightSleepCard: View {
   let bedtime: String
-  let alarmTime: String
-  /// "● Alarm on" / "Alarm off".
-  let alarmState: String
-  let alarmIsOn: Bool
-  /// "exact time" / "by sleep goal".
-  let alarmMode: String
+  /// "7h 45m" — tonight's measured need, when the server has one.
+  let need: String?
 
   var body: some View {
     HStack(alignment: .top, spacing: 8) {
@@ -368,9 +393,9 @@ struct HCCTonightSleepGrid: View {
         .foregroundStyle(HCCTheme.Color.line)
         .padding(.top, 8)
       column(
-        value: alarmTime,
-        lines: [alarmState, alarmMode],
-        color: alarmIsOn ? HCCTheme.Color.good : HCCTheme.Color.muted
+        value: need ?? "--",
+        lines: need == nil ? ["No sleep need", "yet"] : ["Tonight's", "sleep need"],
+        color: HCCTheme.Color.muted
       )
     }
     .padding(.top, 6)

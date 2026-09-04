@@ -711,3 +711,223 @@ struct HCCComingSoonSheet: View {
     .hccBackground()
   }
 }
+
+// ── Markdown ─────────────────────────────────────────────────────────────────
+
+/// The server writes prose as markdown — insight summaries, "the plan", the
+/// weekly retrospective — and the web app renders it. Rendering it as a flat
+/// string on the phone would show `**bold**` and `- ` to the reader, so this is
+/// the one place that turns those blocks into views.
+///
+/// Deliberately small: paragraphs, `#`-headings, `-`/`*` bullets and `1.`
+/// ordered items, with inline emphasis handed to `AttributedString`'s own
+/// markdown parser. It is not a general renderer — no tables, no code fences,
+/// no images — because nothing the server writes uses them. A line it does not
+/// recognise renders as a paragraph rather than disappearing.
+struct HCCMarkdown: View {
+  let text: String
+  var size: Double = 12.5
+  var color: Color = HCCTheme.Color.text
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      ForEach(Array(Self.blocks(text).enumerated()), id: \.offset) { _, block in
+        switch block {
+        case let .heading(level, content):
+          inline(content)
+            .font(HCCTheme.Font.display(size: size + (level == 1 ? 2.5 : 1), weight: .medium))
+            .foregroundStyle(HCCTheme.Color.text)
+        case let .paragraph(content):
+          inline(content)
+            .font(HCCTheme.Font.body(size: size))
+            .lineSpacing(3)
+            .foregroundStyle(color)
+        case let .item(marker, content):
+          HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Text(marker)
+              .font(HCCTheme.Font.body(size: size))
+              .foregroundStyle(HCCTheme.Color.accent)
+            inline(content)
+              .font(HCCTheme.Font.body(size: size))
+              .lineSpacing(3)
+              .foregroundStyle(color)
+          }
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func inline(_ content: String) -> Text {
+    Text(Self.attributed(content))
+  }
+
+  /// Inline emphasis only. `interpretedSyntax: .inlineOnlyPreservingWhitespace`
+  /// keeps the parser from swallowing a line it thinks is a block, which is
+  /// this type's job; a string it cannot parse is shown verbatim rather than
+  /// dropped.
+  static func attributed(_ content: String) -> AttributedString {
+    (try? AttributedString(
+      markdown: content,
+      options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+    )) ?? AttributedString(content)
+  }
+
+  enum Block {
+    case heading(level: Int, String)
+    case paragraph(String)
+    /// A bullet or a numbered item; `marker` is what is drawn in the gutter.
+    case item(marker: String, String)
+  }
+
+  /// Consecutive plain lines join into one paragraph — a hard-wrapped sentence
+  /// is one sentence, not three — while a heading or a list item always starts
+  /// its own block.
+  static func blocks(_ text: String) -> [Block] {
+    var out: [Block] = []
+    var paragraph: [String] = []
+
+    func flush() {
+      let joined = paragraph.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+      paragraph.removeAll()
+      if !joined.isEmpty { out.append(.paragraph(joined)) }
+    }
+
+    for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+      let line = String(rawLine).trimmingCharacters(in: .whitespaces)
+      if line.isEmpty { flush(); continue }
+
+      if line.hasPrefix("#") {
+        flush()
+        let hashes = line.prefix { $0 == "#" }.count
+        let content = String(line.dropFirst(hashes)).trimmingCharacters(in: .whitespaces)
+        if !content.isEmpty { out.append(.heading(level: min(hashes, 3), content)) }
+        continue
+      }
+
+      if line.hasPrefix("- ") || line.hasPrefix("* ") {
+        flush()
+        out.append(.item(marker: "•", String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces)))
+        continue
+      }
+
+      if let dot = line.firstIndex(of: "."),
+         line.distance(from: line.startIndex, to: dot) <= 2,
+         Int(line[line.startIndex..<dot]) != nil,
+         line.index(after: dot) < line.endIndex,
+         line[line.index(after: dot)] == " " {
+        flush()
+        let number = String(line[line.startIndex...dot])
+        let content = String(line[line.index(dot, offsetBy: 2)...]).trimmingCharacters(in: .whitespaces)
+        out.append(.item(marker: number, content))
+        continue
+      }
+
+      paragraph.append(line)
+    }
+    flush()
+    return out
+  }
+}
+
+// ── Status dot ───────────────────────────────────────────────────────────────
+
+/// The web page's `StatusDot`: a 6-pt disc coloured by a server status word.
+/// The vocabulary is the server's (`nominal` / `watch` / `alert` / `unknown`),
+/// and an unrecognised word draws muted rather than guessing a colour.
+struct HCCStatusDot: View {
+  let status: String?
+  var size: Double = 6
+
+  var body: some View {
+    Circle()
+      .fill(Self.color(status))
+      .frame(width: size, height: size)
+  }
+
+  static func color(_ status: String?) -> Color {
+    switch status?.lowercased() {
+    case "nominal", "optimal", "good": HCCTheme.Color.good
+    case "watch": HCCTheme.Color.warn
+    case "alert", "bad": HCCTheme.Color.bad
+    default: HCCTheme.Color.muted
+    }
+  }
+}
+
+// ── Flow row ─────────────────────────────────────────────────────────────────
+
+/// A wrapping row: lays children left to right and starts a new line when the
+/// next one will not fit.
+///
+/// Exists because the web page's badge rows and weekly chips are `flex-wrap`,
+/// and on a phone an `HStack` would either clip the last chip or squeeze every
+/// one of them. Clipping is the worse failure — a chip row that shows four of
+/// five numbers reads as "there are four".
+struct HCCFlowRow<Content: View>: View {
+  var spacing: CGFloat = 8
+  var lineSpacing: CGFloat = 6
+  @ViewBuilder let content: () -> Content
+
+  var body: some View {
+    Layout(spacing: spacing, lineSpacing: lineSpacing) { content() }
+  }
+
+  private struct Layout: SwiftUI.Layout {
+    let spacing: CGFloat
+    let lineSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+      let width = proposal.width ?? .infinity
+      let rows = rows(subviews: subviews, maxWidth: width)
+      let height = rows.reduce(0) { $0 + $1.height } + lineSpacing * CGFloat(max(rows.count - 1, 0))
+      let widest = rows.map(\.width).max() ?? 0
+      return CGSize(width: min(widest, width), height: height)
+    }
+
+    func placeSubviews(
+      in bounds: CGRect,
+      proposal: ProposedViewSize,
+      subviews: Subviews,
+      cache: inout ()
+    ) {
+      var y = bounds.minY
+      for row in rows(subviews: subviews, maxWidth: bounds.width) {
+        var x = bounds.minX
+        for index in row.indices {
+          let size = subviews[index].sizeThatFits(.unspecified)
+          subviews[index].place(
+            at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+            proposal: ProposedViewSize(size)
+          )
+          x += size.width + spacing
+        }
+        y += row.height + lineSpacing
+      }
+    }
+
+    private struct Row {
+      var indices: [Int] = []
+      var width: CGFloat = 0
+      var height: CGFloat = 0
+    }
+
+    private func rows(subviews: Subviews, maxWidth: CGFloat) -> [Row] {
+      var rows: [Row] = []
+      var current = Row()
+      for index in subviews.indices {
+        let size = subviews[index].sizeThatFits(.unspecified)
+        let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
+        if !current.indices.isEmpty, needed > maxWidth {
+          rows.append(current)
+          current = Row()
+        }
+        current.width = current.indices.isEmpty ? size.width : current.width + spacing + size.width
+        current.height = max(current.height, size.height)
+        current.indices.append(index)
+      }
+      if !current.indices.isEmpty { rows.append(current) }
+      return rows
+    }
+  }
+}
