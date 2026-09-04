@@ -55,6 +55,77 @@ struct HCCDayNav: View {
   }
 }
 
+/// The top bar's left control: pull every connected integration now.
+///
+/// The box's cron is the normal path (WHOOP every 3h, the Fitbit pipe twice a
+/// day plus a 5-minute strain refresh, the scale twice a day). This is for the
+/// minutes those schedules cannot cover — just off a workout, just off the
+/// scale — so it has to show its own work: a spinner while it runs, and then
+/// whether anything actually landed. A button that looks identical before and
+/// after teaches the owner to tap it twice.
+struct HCCSyncButton: View {
+  let isRunning: Bool
+  /// The finished state, if one is still on screen. `nil` while idle.
+  let outcome: Bool?
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      ZStack {
+        Circle().fill(HCCTheme.Color.card)
+        Circle().strokeBorder(HCCTheme.Color.line, lineWidth: 1)
+        icon
+      }
+      .frame(width: 32, height: 32)
+      .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .disabled(isRunning)
+    .accessibilityLabel("Sync now")
+    .accessibilityValue(accessibilityValue)
+  }
+
+  @ViewBuilder private var icon: some View {
+    if isRunning {
+      // The system spinner rather than a rotating chevron: it is the one shape
+      // iOS users already read as "working", and it cannot desynchronise from
+      // the request the way a hand-driven animation can.
+      ProgressView()
+        .controlSize(.small)
+        .tint(HCCTheme.Color.muted)
+    } else {
+      Image(systemName: symbol)
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(tint)
+    }
+  }
+
+  private var symbol: String {
+    switch outcome {
+    case .some(true): "checkmark"
+    case .some(false): "exclamationmark.triangle"
+    case nil: "arrow.clockwise"
+    }
+  }
+
+  private var tint: Color {
+    switch outcome {
+    case .some(true): HCCTheme.Color.good
+    case .some(false): HCCTheme.Color.warn
+    case nil: HCCTheme.Color.text
+    }
+  }
+
+  private var accessibilityValue: String {
+    if isRunning { return "Syncing" }
+    switch outcome {
+    case .some(true): return "Synced"
+    case .some(false): return "Sync had a problem"
+    case nil: return "Idle"
+    }
+  }
+}
+
 /// `.devpill` — the driving device, its state dot, and its battery.
 ///
 /// Several sources expose no battery at all (the read API returns null for

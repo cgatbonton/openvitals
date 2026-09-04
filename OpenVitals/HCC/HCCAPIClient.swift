@@ -151,9 +151,10 @@ final class HCCAPIClient: @unchecked Sendable {
     _ path: String,
     query: [String: String],
     body: Data?,
-    retryable: Bool
+    retryable: Bool,
+    timeout: TimeInterval? = nil
   ) async throws -> T {
-    let request = try makeRequest(method, path, query: query, body: body)
+    let request = try makeRequest(method, path, query: query, body: body, timeout: timeout)
     var attempt = 0
 
     while true {
@@ -187,7 +188,13 @@ final class HCCAPIClient: @unchecked Sendable {
     }
   }
 
-  private func makeRequest(_ method: String, _ path: String, query: [String: String], body: Data?) throws -> URLRequest {
+  private func makeRequest(
+    _ method: String,
+    _ path: String,
+    query: [String: String],
+    body: Data?,
+    timeout: TimeInterval? = nil
+  ) throws -> URLRequest {
     guard var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
       throw HCCAPIError.http(status: -1, message: "Invalid server address.")
     }
@@ -200,6 +207,11 @@ final class HCCAPIClient: @unchecked Sendable {
 
     var request = URLRequest(url: url)
     request.httpMethod = method
+    // The session's 20s default is sized for reads. A route that goes out to a
+    // vendor on our behalf needs longer, and says so per request rather than
+    // slackening the timeout every screen depends on. The session's
+    // `timeoutIntervalForResource` (60s) is still the ceiling.
+    if let timeout { request.timeoutInterval = timeout }
     request.setValue("application/json", forHTTPHeaderField: "Accept")
     if let token = tokenProvider() {
       request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -334,6 +346,21 @@ extension HCCAPIClient {
   @discardableResult
   func setInsightStatus(id: String, status: String) async throws -> HCCInsightStatusUpdate {
     try await patchBare("/api/insights/\(id)", body: HCCInsightStatusBody(status: status))
+  }
+
+  /// Pull every connected integration now, instead of waiting for the box's
+  /// schedule. Answers per-source, so the button can name what failed.
+  ///
+  /// Long timeout because this route goes out to WHOOP, Google and Withings
+  /// before it answers; `retryable: false` because a POST is never replayed and
+  /// this one least of all — the server enforces a cooldown and a replay would
+  /// simply come back 429.
+  @discardableResult
+  func triggerSync() async throws -> HCCSyncResult {
+    let envelope: HCCEnvelope<HCCSyncResult> = try await send(
+      "POST", "\(Self.v1)/sync", query: [:], body: nil, retryable: false, timeout: 55
+    )
+    return envelope.data
   }
 
   /// Front one wrist source when two report the same stream. `nil` clears the

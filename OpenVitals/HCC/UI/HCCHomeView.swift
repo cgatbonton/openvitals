@@ -111,19 +111,69 @@ struct HCCHomeView: View {
 
   // ── Top bar ────────────────────────────────────────────────────────────────
 
+  /// Sync on the left, the day in the MIDDLE, the device on the right.
+  ///
+  /// The two side controls take `maxWidth: .infinity`, which makes SwiftUI give
+  /// them equal widths and so centres the day nav for real — a plain
+  /// `Spacer()` on either side would only centre it while the two controls
+  /// happened to be the same width, and the device pill's width changes with
+  /// the hardware name it is showing. The pill absorbs the difference by
+  /// truncating (it is already `lineLimit(1)`); the day label never moves.
   private var topBar: some View {
-    HStack(spacing: 8) {
-      HCCDayNav(
-        label: dayLabel,
-        canGoBack: true,
-        canGoForward: !isToday,
-        goBack: { step(days: -1) },
-        goForward: { step(days: 1) }
-      )
-      Spacer(minLength: 8)
-      devicePill
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 8) {
+        syncButton
+          .frame(maxWidth: .infinity, alignment: .leading)
+        HCCDayNav(
+          label: dayLabel,
+          canGoBack: true,
+          canGoForward: !isToday,
+          goBack: { step(days: -1) },
+          goForward: { step(days: 1) }
+        )
+        .fixedSize()
+        devicePill
+          .frame(maxWidth: .infinity, alignment: .trailing)
+      }
+      syncNote
     }
     .padding(.bottom, 2)
+  }
+
+  private var syncButton: some View {
+    HCCSyncButton(
+      isRunning: store.hcc.syncPhase == .running,
+      outcome: syncOutcome,
+      action: { Task { await store.triggerSync() } }
+    )
+  }
+
+  /// `true`/`false` while a finished sync is still being reported, `nil` when
+  /// there is nothing to say.
+  private var syncOutcome: Bool? {
+    if case let .done(_, ok) = store.hcc.syncPhase { return ok }
+    return nil
+  }
+
+  /// What the last sync did, for as long as it is worth saying.
+  ///
+  /// A sync's result is not visible in the numbers when nothing changed, and
+  /// "nothing new upstream" is the single most likely outcome of an impatient
+  /// tap — so the button's own state is not enough and this line carries the
+  /// sentence. It clears itself, because a status that stays becomes furniture.
+  @ViewBuilder private var syncNote: some View {
+    if case let .done(message, ok) = store.hcc.syncPhase {
+      Text(message)
+        .font(HCCTheme.Font.body(size: 11.5))
+        .foregroundStyle(ok ? HCCTheme.Color.muted : HCCTheme.Color.warn)
+        .fixedSize(horizontal: false, vertical: true)
+        .transition(.opacity)
+        .task(id: message) {
+          try? await Task.sleep(for: .seconds(ok ? 3 : 6))
+          guard !Task.isCancelled else { return }
+          store.clearSyncPhase()
+        }
+    }
   }
 
   private var devicePill: some View {

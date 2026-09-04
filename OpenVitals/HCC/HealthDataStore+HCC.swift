@@ -22,6 +22,19 @@ import SwiftUI
 
 // ── Cache ────────────────────────────────────────────────────────────────────
 
+/// What the Home top bar's sync button is doing.
+///
+/// `done` carries the sentence the button reports for a few seconds before it
+/// goes quiet again. A sync that ran but wrote nothing is a SUCCESS with that
+/// sentence — "nothing new upstream" is an answer, and showing it as a failure
+/// would teach the owner to distrust a button that worked.
+enum HCCSyncPhase: Equatable {
+  case idle
+  case running
+  case done(message: String, ok: Bool)
+}
+
+
 /// The mutable cloud state behind the published snapshots.
 ///
 /// Swift extensions cannot add stored properties, so this object is held by the
@@ -82,6 +95,9 @@ final class HCCStoreState {
   /// True when `alarm` is the server's built-in default rather than a saved one.
   var alarmIsDefault = false
   var devices: [HCCDevice] = []
+  /// The sync button's state. Never persisted: a sync in flight when the app is
+  /// killed is a sync the server finished anyway, and the next read shows it.
+  var syncPhase: HCCSyncPhase = .idle
   /// The wrist source fronted for display; nil = the automatic priority rule.
   var preferredSource: String?
   var instance: HCCInstance?
@@ -1226,6 +1242,80 @@ extension HealthDataStore {
       hccRecord(error)
       return false
     }
+  }
+
+  /// Pull every connected integration now, rather than waiting for the box's
+  /// schedule, then re-read the day off what landed.
+  ///
+  /// The server owns the rate limit (one manual sync a minute, because both
+  /// WHOOP and Withings rotate their refresh token on every use and two
+  /// refreshes racing is how this account has lost its connection before), so
+  /// the guard here is only against a double tap inside one round trip.
+  ///
+  /// Never throws: the outcome becomes the button's own reported state.
+  @discardableResult
+  func triggerSync() async -> Bool {
+    guard hcc.syncPhase != .running else { return false }
+    hccWillChange()
+    hcc.syncPhase = .running
+
+    do {
+      let result = try await HCCSession.shared.client.triggerSync()
+      // Force, because the whole point of the tap is the session-scoped reads:
+      // `/devices` is where the freshly advanced sync times live.
+      await refreshFromHCC(
+        date: Self.hccLocalDate(fromDayKey: hcc.lastRequestedDay ?? ""),
+        force: true
+      )
+      hccWillChange()
+      hcc.syncPhase = .done(message: Self.hccSyncMessage(result), ok: !result.degraded)
+      return !result.degraded
+    } catch {
+      hccWillChange()
+      // The server's own sentence where it sent one — the 429 cooldown reads
+      // "Just synced — try again in 43s", which is the answer, not an error.
+      hcc.syncPhase = .done(message: Self.hccSyncFailureMessage(error), ok: false)
+      hccRecord(error)
+      return false
+    }
+  }
+
+  /// Clear a finished sync's message. Called by the button after it has been
+  /// on screen long enough to read.
+  func clearSyncPhase() {
+    guard case .done = hcc.syncPhase else { return }
+    hccWillChange()
+    hcc.syncPhase = .idle
+  }
+
+  /// One line for a completed sync: what landed, or which pipe did not answer.
+  ///
+  /// Sources are named (WHOOP, Fitbit, Withings) through `HCCCopy` — the same
+  /// cloud surface the Devices sheet names them on. A failure that did not say
+  /// WHICH device failed would send the owner to the Devices sheet to find out,
+  /// which is the trip this line exists to save.
+  static func hccSyncMessage(_ result: HCCSyncResult) -> String {
+    let bad = result.sources.filter { $0.status != "ok" }
+    if bad.isEmpty {
+      return result.written > 0
+        ? "Synced — \(result.written) new reading\(result.written == 1 ? "" : "s")."
+        : "Synced — nothing new yet."
+    }
+    let names = bad.map { HCCCopy.sourceLabel($0.source) }.joined(separator: ", ")
+    // One failure gets its own reason; several would not fit the line, so they
+    // get named and the Devices sheet carries the detail.
+    if bad.count == 1, let reason = bad[0].error, !reason.isEmpty {
+      return "\(names): \(reason)"
+    }
+    return "Could not sync \(names)."
+  }
+
+  /// The message for a sync that never reached a result.
+  static func hccSyncFailureMessage(_ error: Error) -> String {
+    if let apiError = error as? HCCAPIError, let text = apiError.errorDescription {
+      return text
+    }
+    return "Sync failed."
   }
 
   /// Front one wrist source when two report the same stream. `nil` clears the

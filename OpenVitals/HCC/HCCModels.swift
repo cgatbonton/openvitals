@@ -682,6 +682,39 @@ struct HCCDeviceBattery: Decodable {
   let status: String?
 }
 
+// ── /sync ────────────────────────────────────────────────────────────────────
+
+/// The answer to a "sync now" tap: one row per connected pipe, plus the totals
+/// the button needs to decide what to say.
+///
+/// A source that ran but wrote nothing is `ok` with `written: 0` — that is a
+/// real answer (nothing new upstream), not a failure, and the button must not
+/// dress it as one.
+struct HCCSyncResult: Decodable {
+  let sources: [HCCSyncSource]
+  /// Measurements written across every source that ran.
+  let written: Int
+  /// True when at least one connected source did not sync cleanly.
+  let degraded: Bool
+  let startedAt: String
+  let finishedAt: String
+}
+
+struct HCCSyncSource: Decodable, Identifiable {
+  /// `OAuthConnection.provider` — the pipe that was pulled.
+  let provider: String
+  /// The source its measurements land under; `FITBIT` for the Google pipe.
+  let source: String
+  /// `ok` | `failed` | `skipped`.
+  let status: String
+  let written: Int
+  let skipped: Int
+  /// Why it failed or was skipped. Null when it ran cleanly.
+  let error: String?
+
+  var id: String { provider }
+}
+
 // ── /dashboard ───────────────────────────────────────────────────────────────
 
 /// The home screen's tile order. Stored on the USER, so a layout saved on the
