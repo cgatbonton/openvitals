@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import WatchConnectivity
 
 // HCC: live heart rate mirrored from a workout the Apple Watch is recording.
 //
@@ -96,8 +97,32 @@ final class HCCWatchMirrorSource: NSObject, HCCLiveHeartRateSource, @unchecked S
     // catches it. Saying so is the honest state — a spinner here would look
     // like the phone was doing something.
     if session == nil {
-      onStatusChanged?("Waiting for a workout to start on the watch.")
+      onStatusChanged?(Self.idleReason())
     }
+  }
+
+  /// Why no readings are coming, when none are.
+  ///
+  /// "Waiting for a workout to start on the watch" is only true once the
+  /// companion app is actually on the watch. Said unconditionally it sends the
+  /// owner off to start a workout that can never reach this phone, so each
+  /// step that has to be true is checked and named instead.
+  static func idleReason() -> String {
+    guard WCSession.isSupported() else {
+      return "This iPhone cannot pair with an Apple Watch."
+    }
+    HCCWatchConnectivity.activate()
+    let session = WCSession.default
+    guard session.activationState == .activated else {
+      return "Connecting to the watch..."
+    }
+    guard session.isPaired else {
+      return "No Apple Watch is paired with this iPhone."
+    }
+    guard session.isWatchAppInstalled else {
+      return "The Command Center watch app is not on your Apple Watch yet, so it cannot send heart rate."
+    }
+    return "Waiting for a workout to start on the watch."
   }
 
   func stop() {

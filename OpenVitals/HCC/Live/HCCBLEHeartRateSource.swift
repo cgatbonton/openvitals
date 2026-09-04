@@ -60,7 +60,17 @@ final class HCCBLEHeartRateSource: NSObject, HCCLiveHeartRateSource, @unchecked 
     }
   }
 
-  let label = "Bluetooth heart-rate device"
+  /// What is connected, in the device's OWN advertised name.
+  ///
+  /// This reader speaks the standard heart-rate profile, so it will connect to
+  /// a band, a chest strap or anything else that broadcasts it — "Bluetooth
+  /// heart-rate device" is the honest name for the option, but a poor name for
+  /// the thing on the wrist once one is actually connected. The name comes off
+  /// the air from the peripheral, never from a table of brands here, which is
+  /// also what the status lines have always shown.
+  var label: String {
+    connected.map(Self.displayName) ?? "Bluetooth heart-rate device"
+  }
 
   /// Discovered peripherals, newest scan first. Read on the main actor by the
   /// setup sheet through the callback below rather than by reaching in here.
