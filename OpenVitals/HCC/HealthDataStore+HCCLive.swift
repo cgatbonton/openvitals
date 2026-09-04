@@ -71,6 +71,19 @@ final class HCCLiveState: ObservableObject {
   @Published private(set) var previewBpm: Int?
   private var previewTask: Task<Void, Never>?
   private var previewStaleTask: Task<Void, Never>?
+  /// The source the preview is currently draining.
+  ///
+  /// `samples` is a single `AsyncStream` with one continuation, so it supports
+  /// exactly ONE iteration for its lifetime. Cancelling a drain and starting
+  /// another on the same source tears the iterator down and the replacement
+  /// receives nothing — while the device stays happily connected and keeps
+  /// reporting that it is sending. Setup asks for a preview several times as
+  /// the device list and zone config land, so this is what keeps those repeats
+  /// from silently killing the readings.
+  private weak var previewSource: AnyObject?
+  #if DEBUG
+  private var debugPreviewSource: HCCDebugHeartRateSource?
+  #endif
   /// How long a preview reading stands after the last sample. A device that
   /// walks out of range stops sending without saying so, and a number still on
   /// screen a minute later is a reading nobody is taking.
@@ -324,7 +337,9 @@ extension HCCLiveState {
       startBluetoothScan()
     #if DEBUG
     case .debug:
-      previewFrom(HCCDebugHeartRateSource())
+      let source = debugPreviewSource ?? HCCDebugHeartRateSource()
+      debugPreviewSource = source
+      previewFrom(source)
     #endif
     default:
       stopPreview()
@@ -334,6 +349,7 @@ extension HCCLiveState {
   func stopPreview() {
     previewTask?.cancel()
     previewTask = nil
+    previewSource = nil
     previewStaleTask?.cancel()
     previewStaleTask = nil
     previewBpm = nil
@@ -352,7 +368,11 @@ extension HCCLiveState {
   /// Drain a source into the preview only. Never touches the accumulator, so a
   /// reading taken while deciding cannot land in the session's zone time.
   private func previewFrom(_ source: HCCLiveHeartRateSource) {
+    // Already draining this source: leave it alone. Restarting would cost the
+    // readings, not refresh them (see `previewSource`).
+    if previewSource === source, let task = previewTask, !task.isCancelled { return }
     previewTask?.cancel()
+    previewSource = source
     previewTask = Task { [weak self] in
       try? await source.start()
       for await sample in source.samples {
@@ -391,6 +411,7 @@ extension HCCLiveState {
     // session's own drain takes over, or readings alternate between them.
     previewTask?.cancel()
     previewTask = nil
+    previewSource = nil
     previewStaleTask?.cancel()
     previewStaleTask = nil
     previewBpm = nil
