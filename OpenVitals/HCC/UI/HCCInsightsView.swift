@@ -116,9 +116,9 @@ struct HCCInsightsView: View {
   /// the label a day for anyone west of the instance.
   static func weekRange(_ insight: HCCWeeklyInsight) -> String {
     let calendar = HealthDataStore.hccInstanceCalendar
-    guard let start = HealthDataStore.hccLocalDate(fromDayKey: insight.weekStart),
-          let end = HealthDataStore.hccLocalDate(fromDayKey: insight.weekEnd)
-    else { return "\(insight.weekStart) – \(insight.weekEnd)" }
+    guard let start = HealthDataStore.hccLocalDate(fromDayKey: insight.startDayKey),
+          let end = HealthDataStore.hccLocalDate(fromDayKey: insight.endDayKey)
+    else { return "\(insight.startDayKey) – \(insight.endDayKey)" }
     let crossesYear = calendar.component(.year, from: start) != calendar.component(.year, from: end)
     return "\(day(start, withYear: crossesYear)) – \(day(end, withYear: true))"
   }

@@ -538,6 +538,12 @@ struct HCCWeeklyInsightsResponse: Decodable {
 struct HCCWeeklyInsight: Decodable, Identifiable {
   let id: String
   /// Inclusive civil days: Sunday the window opens, Saturday it closes.
+  ///
+  /// Read these through `startDayKey` / `endDayKey`, never raw. The column
+  /// behind them is date-only held at UTC midnight, and older servers serialise
+  /// the Date itself — so the wire value may be a full ISO instant rather than
+  /// the `YYYY-MM-DD` this field is documented as. Printing it raw is what put
+  /// "2026-08-23T00:00:00.000Z" on the Insights page as a week label.
   let weekStart: String
   let weekEnd: String
   /// One plain-English sentence for the collapsed row.
@@ -549,6 +555,26 @@ struct HCCWeeklyInsight: Decodable, Identifiable {
   /// 0 means an empty week, recorded as such.
   let metricsCount: Int
   let createdAt: String
+
+  var startDayKey: String { Self.dayKey(weekStart) }
+  var endDayKey: String { Self.dayKey(weekEnd) }
+
+  /// The civil day a week boundary stands for.
+  ///
+  /// Taken as the leading `YYYY-MM-DD` rather than by parsing the instant and
+  /// re-formatting it: the column is UTC midnight standing for a civil day, so
+  /// its date part IS the answer, while converting it into any other zone would
+  /// slide the label a day. A value that is neither shape is returned unchanged
+  /// rather than replaced with a guess.
+  private static func dayKey(_ raw: String) -> String {
+    guard raw.count >= 10 else { return raw }
+    let head = String(raw.prefix(10))
+    let parts = head.split(separator: "-")
+    guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
+          parts.allSatisfy({ Int($0) != nil })
+    else { return raw }
+    return head
+  }
 }
 
 // ── /metrics ─────────────────────────────────────────────────────────────────
