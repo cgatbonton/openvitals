@@ -314,7 +314,7 @@ private struct InsightCardView: View {
 
   var body: some View {
     HStack(alignment: .top, spacing: 10) {
-      HCCStatusDot(status: Self.dotStatus(card.severity), size: 7)
+      HCCStatusDot(status: HCCStatusDot.severityStatus(card.severity), size: 7)
         .padding(.top, 6)
 
       VStack(alignment: .leading, spacing: 6) {
@@ -326,7 +326,7 @@ private struct InsightCardView: View {
 
         HCCFlowRow(spacing: 6, lineSpacing: 5) {
           HCCPill(Self.kindLabel(card.kind), tone: Self.kindTone(card.kind))
-          HCCPill(card.severity, tone: Self.severityTone(card.severity))
+          HCCPill(card.severity, tone: .severity(card.severity))
           if let grade = card.evidenceGrade {
             HCCPill(grade, tone: .muted)
           }
@@ -460,20 +460,4 @@ private struct InsightCardView: View {
     }
   }
 
-  private static func severityTone(_ severity: String) -> HCCPill.Tone {
-    switch severity {
-    case "CRITICAL", "HIGH": .bad
-    case "MEDIUM": .warn
-    default: .muted
-    }
-  }
-
-  /// The web page's dot rule: severity, not status.
-  private static func dotStatus(_ severity: String) -> String {
-    switch severity {
-    case "CRITICAL", "HIGH": "alert"
-    case "MEDIUM": "watch"
-    default: "nominal"
-    }
-  }
 }

@@ -855,6 +855,33 @@ struct HCCStatusDot: View {
   }
 }
 
+/// The severity vocabulary the server writes on an insight (`INFO` | `LOW` |
+/// `MEDIUM` | `HIGH` | `CRITICAL`), read the two ways the web page reads it.
+///
+/// One home for the rule: the Insights page and the Health landing both show
+/// the same card, and a severity that dots red on one screen and grey on the
+/// other would be two answers to one question.
+extension HCCStatusDot {
+  /// The web page's dot rule: the dot follows SEVERITY, not status.
+  static func severityStatus(_ severity: String) -> String {
+    switch severity {
+    case "CRITICAL", "HIGH": "alert"
+    case "MEDIUM": "watch"
+    default: "nominal"
+    }
+  }
+}
+
+extension HCCPill.Tone {
+  static func severity(_ severity: String) -> HCCPill.Tone {
+    switch severity {
+    case "CRITICAL", "HIGH": .bad
+    case "MEDIUM": .warn
+    default: .muted
+    }
+  }
+}
+
 // ── Flow row ─────────────────────────────────────────────────────────────────
 
 /// A wrapping row: lays children left to right and starts a new line when the

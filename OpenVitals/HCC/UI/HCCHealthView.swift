@@ -131,7 +131,9 @@ struct HCCHealthLanding: View {
     HCCScreen {
       HCCDetailHeader(title: "Health", showsBack: false)
       grid
+      keyVitals
       monitor
+      activeInsights
     }
     .navigationDestination(for: Page.self) { page in
       switch page {
@@ -193,6 +195,80 @@ struct HCCHealthLanding: View {
     isPending ? "Loading…" : "Not loaded"
   }
 
+  // ── Key vitals and active insights ─────────────────────────────────────────
+
+  /// `/home` carries both: the curated key vitals and the ACTIVE flags, which
+  /// are the two lists the web command page shows above and below its own
+  /// middle. The selection, the order and the cap are all the server's.
+  ///
+  /// Neither list is day-scoped — the server reads current metric values and
+  /// every ACTIVE card without consulting the date — so falling back to any
+  /// cached day is not a stale-day claim, and a day the phone has not fetched
+  /// is not an empty answer.
+  private var home: HCCHome? {
+    store.hcc.homeByDate[HealthDataStore.hccDayKey(Date())] ?? store.hcc.homeByDate.values.first
+  }
+
+  /// A card's own title row. The landing titles its cards with `HCCLabel`
+  /// rather than `HCCSectionHeader`, so the link beside the title is built here
+  /// instead of reusing `HCCSectionLink`, which pushes nothing.
+  private func cardTitle(_ title: String, link: String, page: Page) -> some View {
+    HStack(alignment: .firstTextBaseline) {
+      HCCLabel(title, size: 11)
+      Spacer(minLength: 8)
+      NavigationLink(value: page) {
+        HCCLabel(link, size: 10, color: HCCTheme.Color.accent)
+      }
+      .buttonStyle(.plain)
+    }
+  }
+
+  private var keyVitals: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      cardTitle("Key vitals", link: "Biomarkers", page: .biomarkers)
+      if let vitals = home?.vitals {
+        if vitals.isEmpty {
+          HCCEmptyNote("No biomarkers on record yet.")
+        } else {
+          VStack(spacing: 0) {
+            ForEach(Array(vitals.enumerated()), id: \.element.id) { index, metric in
+              KeyVitalRow(metric: metric, showsDivider: index < vitals.count - 1)
+            }
+          }
+          HCCFootnote("Graded against the optimal targets in your metric catalog, not lab reference ranges.")
+            .padding(.top, 8)
+        }
+      } else {
+        // "Loading" and "nothing flagged" are different answers; an empty card
+        // for a payload that has not arrived would state the wrong one.
+        HCCLoadingNote()
+      }
+    }
+    .hccCard()
+  }
+
+  private var activeInsights: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      cardTitle("Active insights", link: "Insights", page: .insights)
+      if let flags = home?.flags {
+        if flags.isEmpty {
+          HCCEmptyNote("Nothing flagged.")
+        } else {
+          VStack(spacing: 0) {
+            ForEach(Array(flags.enumerated()), id: \.element.id) { index, flag in
+              ActiveFlagRow(flag: flag, showsDivider: index < flags.count - 1)
+            }
+          }
+          HCCFootnote("The short form. The plan behind each one, and the resolved history, are on Insights.")
+            .padding(.top, 8)
+        }
+      } else {
+        HCCLoadingNote()
+      }
+    }
+    .hccCard()
+  }
+
   // ── Health monitor ─────────────────────────────────────────────────────────
 
   private var monitorSeries: [HCCVitalSeries] {
@@ -220,9 +296,12 @@ struct HCCHealthLanding: View {
   // ── Loading ────────────────────────────────────────────────────────────────
 
   /// The Health tab can be the first screen a launch reaches, so the wearable
-  /// streams the monitor draws are pulled if Home has not already.
+  /// streams the monitor draws — and the `/home` payload behind the key vitals
+  /// and the active insights — are pulled if Home has not already. Both halves
+  /// are checked: one refresh fills both, but arriving with only the vitals
+  /// cached would otherwise leave the two new cards spinning forever.
   private func loadVitalsIfNeeded() async {
-    guard store.hcc.vitals.isEmpty else { return }
+    guard store.hcc.vitals.isEmpty || home == nil else { return }
     await store.refreshFromHCC()
   }
 
@@ -339,6 +418,93 @@ private struct MonitorRow: View {
     }
     let fraction = (value - low) / (high - low)
     return min(max(0.30 + fraction * 0.42, 0.02), 0.98)
+  }
+}
+
+// ── Key vital row ────────────────────────────────────────────────────────────
+
+/// One key vital: the server's status dot, the marker's name, its latest value
+/// and how old that value is — the four things the web page's tile carries.
+///
+/// The dot is the server's grading against the OPTIMAL target, never a lab
+/// reference range, and an unrecognised status word draws muted rather than
+/// being coloured green by default.
+private struct KeyVitalRow: View {
+  let metric: HCCMetricView
+  let showsDivider: Bool
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack(spacing: 10) {
+        HCCStatusDot(status: metric.status, size: 8)
+
+        Text(metric.displayName)
+          .font(HCCTheme.Font.body(size: 12.5))
+          .foregroundStyle(HCCTheme.Color.text)
+          .lineLimit(2)
+
+        Spacer(minLength: 8)
+
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+          Text(metric.value.map { HCCFormat.decimal($0, abs($0) >= 100 ? 0 : 1) } ?? HCCFormat.placeholder)
+            .font(HCCTheme.Font.data(size: 12.5))
+            .monospacedDigit()
+            .foregroundStyle(HCCTheme.Color.text)
+          if let unit = metric.unit, !unit.isEmpty, metric.value != nil {
+            Text(unit)
+              .font(HCCTheme.Font.data(size: 9.5))
+              .foregroundStyle(HCCTheme.Color.muted)
+          }
+        }
+
+        Text(metric.ageText)
+          .font(HCCTheme.Font.data(size: 10))
+          .foregroundStyle(HCCTheme.Color.muted)
+          .frame(minWidth: 56, alignment: .trailing)
+      }
+      .padding(.vertical, 7)
+      if showsDivider { HCCDivider() }
+    }
+    .accessibilityElement(children: .combine)
+  }
+}
+
+// ── Active flag row ──────────────────────────────────────────────────────────
+
+/// One ACTIVE card in its short form: the severity dot, the title, two lines of
+/// the summary, and the severity itself. The dot and the pill both read the
+/// shared severity rules, so this row and the full card on Insights can never
+/// colour the same card differently.
+private struct ActiveFlagRow: View {
+  let flag: HCCInsightCard
+  let showsDivider: Bool
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack(alignment: .top, spacing: 10) {
+        HCCStatusDot(status: HCCStatusDot.severityStatus(flag.severity), size: 8)
+          .padding(.top, 4)
+
+        VStack(alignment: .leading, spacing: 3) {
+          Text(flag.title)
+            .font(HCCTheme.Font.body(size: 12.5, weight: .medium))
+            .foregroundStyle(HCCTheme.Color.text)
+            .fixedSize(horizontal: false, vertical: true)
+          Text(flag.summary)
+            .font(HCCTheme.Font.body(size: 11.5))
+            .lineSpacing(2.5)
+            .foregroundStyle(HCCTheme.Color.muted)
+            .lineLimit(2)
+        }
+
+        Spacer(minLength: 8)
+
+        HCCPill(flag.severity, tone: .severity(flag.severity))
+      }
+      .padding(.vertical, 8)
+      if showsDivider { HCCDivider() }
+    }
+    .accessibilityElement(children: .combine)
   }
 }
 
