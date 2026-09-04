@@ -41,6 +41,13 @@ side and carries the build, install and verification loop.
 - Point verification at a **local backend and its throwaway database**, never the
   owner's production instance.
 
+## More than one session may be working in this checkout
+
+Two Claude sessions have shared this working tree at once, and a `git add -A`
+from one of them swept the other's in-progress files into an unrelated commit.
+Stage the files you actually changed, by path. If `git status` shows edits you
+did not make, leave them alone and say so rather than committing them.
+
 ## Health data
 
 This app displays one person's health data. Do not paste real values into code,
