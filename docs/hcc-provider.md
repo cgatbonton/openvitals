@@ -369,8 +369,12 @@ and says nothing the card header does not. It survives only as the fallback for
 a protocol with **no linked product** (a free-text regimen), whose rows have no
 other name — drop that fallback and they render blank.
 
-The dose rows are **grouped by time of day** (Breakfast · Lunch · Dinner ·
-Pre-bed · Anytime), the way the printed schedule groups them. The slot is
+The dose rows are **grouped by time of day** (Morning · Lunch · Dinner ·
+Pre-bed · Anytime), the way the printed schedule groups them. The first slot is
+"Morning" rather than "Breakfast" because it holds both the supplements taken
+WITH breakfast and the GH shots taken morning-FASTED, on waking, 30-60 min
+BEFORE food — a "Breakfast" heading would state the opposite of the instruction
+on the dose itself. The slot is
 decided SERVER-side — `doseSlot` in the backend's `src/lib/journal/doses.ts`
 reads it off the dose link's free-text `notes`, since there is no timing column
 — and arrives on `HCCDueDose.slot`. Do not parse it again here: one parser, two
