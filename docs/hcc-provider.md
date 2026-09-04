@@ -357,10 +357,19 @@ exactly its height).
 
 ## The Journal Tab
 
-`HCCJournalView` is the Journal tab in cloud mode. Three cards, in the mockup's
-order: **Behaviors** (the day's yes/no and numeric answers), **Doses** (what the
-active protocols owe that day), **Impact on recovery** (what the answers have
-cost or bought). Files: `HCC/UI/HCCJournalView.swift` (the screen and every
+`HCCJournalView` is the Journal tab in cloud mode. Three cards: **Doses** (what
+the active protocols owe that day), **Behaviors** (the day's yes/no and numeric
+answers), **Impact on recovery** (what the answers have cost or bought).
+
+REVISED 2026-09-03 (Chris) — the mockup had Behaviors first; Doses now lead,
+because the stack is ticked every day and should not sit behind a scroll past a
+card that can be left blank. A dose row is titled by the **supplement**, not by
+the protocol it belongs to: the protocol title repeats down every row of a stack
+and says nothing the card header does not. It survives only as the fallback for
+a protocol with **no linked product** (a free-text regimen), whose rows have no
+other name — drop that fallback and they render blank.
+
+Files: `HCC/UI/HCCJournalView.swift` (the screen and every
 number-to-string helper), `HCC/UI/HCCJournalSections.swift` (the rows,
 presentation only), `HCC/HCCModels+Journal.swift` (DTOs),
 `HCC/HCCAPIClient+Journal.swift` (the five calls),

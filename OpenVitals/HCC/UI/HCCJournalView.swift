@@ -4,9 +4,13 @@ import SwiftUI
 
 /// The Journal tab — `S.journal` from the approved "C · Command" mockup.
 ///
-/// Three cards, in the order the mockup has them: the behaviors the owner
-/// answers for a day, the doses that day owes from the active protocols, and
-/// what the answers have actually cost or bought in next-day recovery.
+/// Three cards: the doses that day owes from the active protocols, the
+/// behaviors the owner answers for the day, and what those answers have
+/// actually cost or bought in next-day recovery.
+///
+/// Doses lead. The mockup put behaviors first; REVISED 2026-09-03 (Chris),
+/// because the stack is the part ticked every single day and it should not sit
+/// behind a scroll past a card that can be left blank.
 ///
 /// It deliberately does NOT list the day's activities. Home already owns that
 /// list, and two places showing the same rows is how they end up disagreeing.

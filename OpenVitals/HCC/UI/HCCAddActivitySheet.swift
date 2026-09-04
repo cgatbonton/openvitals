@@ -119,11 +119,6 @@ struct HCCAddActivitySheet: View {
   private var strainCard: some View {
     VStack(alignment: .leading, spacing: 8) {
       HCCLabel("Strain")
-      // TEMP-VERIFY
-      Text(HCCSportCatalog.slugs.map { HCCActivityCopy.title(for: $0) }.joined(separator: " · "))
-        .font(HCCTheme.Font.body(size: 12.5))
-        .foregroundStyle(HCCTheme.Color.accent)
-        .fixedSize(horizontal: false, vertical: true)
       // The mockup's sentence offers a heart-rate computation. This server has
       // no intraday heart-rate store, so a hand-logged activity is ALWAYS an
       // estimate — see `estimateStrain` in src/lib/activities/zones.ts. Saying
