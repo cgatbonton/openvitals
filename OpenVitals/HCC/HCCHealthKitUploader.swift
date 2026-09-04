@@ -115,7 +115,7 @@ struct HCCHealthKitUploadState: Equatable {
 /// simulator build, for instance) both fall back to the app's own storage rather
 /// than dropping writes silently — the fallback is reported on the sheet.
 enum HCCHealthKitStore {
-  static let appGroup = "group.com.gatbontontech.openvitals"
+  static let appGroup = "group.com.gatbontontech.openvitals-hcc"
 
   private static let enabledKey = "open_vitals.hcc.hk.enabled"
   private static let dailyWatermarkKey = "open_vitals.hcc.hk.dailyTotalsThrough"
@@ -186,8 +186,8 @@ struct HCCHealthKitPendingBatch: Codable {
 final class HCCHealthKitUploader: ObservableObject {
   static let shared = HCCHealthKitUploader()
 
-  nonisolated static let backgroundTaskIdentifier = "com.gatbontontech.openvitals.hcc.healthkit-upload"
-  nonisolated static let backgroundSessionIdentifier = "com.gatbontontech.openvitals.hcc.upload"
+  nonisolated static let backgroundTaskIdentifier = "com.gatbontontech.openvitals-hcc.hcc.healthkit-upload"
+  nonisolated static let backgroundSessionIdentifier = "com.gatbontontech.openvitals-hcc.hcc.upload"
 
   @Published private(set) var state = HCCHealthKitUploadState()
 

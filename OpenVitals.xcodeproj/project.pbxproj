@@ -1489,7 +1489,7 @@
 					"-force_load",
 					"$(SRCROOT)/Rust/$(PLATFORM_NAME)/libopen_vitals_core.a",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals-hcc;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1533,7 +1533,7 @@
 					"-force_load",
 					"$(SRCROOT)/Rust/$(PLATFORM_NAME)/libopen_vitals_core.a",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals-hcc;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1564,7 +1564,7 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals.WorkoutLiveActivityExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals-hcc.WorkoutLiveActivityExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -1594,7 +1594,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals.WorkoutLiveActivityExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals-hcc.WorkoutLiveActivityExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -1618,7 +1618,7 @@
 				INFOPLIST_FILE = HCCWatch/Info.plist;
 				MARKETING_VERSION = 0.1.0;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals-hcc.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1646,7 +1646,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HCCWatch/Info.plist;
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gatbontontech.openvitals-hcc.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;

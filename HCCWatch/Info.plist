@@ -27,7 +27,7 @@
 	<key>WKApplication</key>
 	<true/>
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>com.gatbontontech.openvitals</string>
+	<string>com.gatbontontech.openvitals-hcc</string>
 	<key>WKBackgroundModes</key>
 	<array>
 		<string>workout-processing</string>

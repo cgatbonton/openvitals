@@ -29,7 +29,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.gatbontontech.openvitals.health</string>
+			<string>com.gatbontontech.openvitals-hcc.health</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>openvitals</string>
@@ -87,8 +87,8 @@
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.gatbontontech.openvitals.hcc.healthkit-upload</string>
-		<string>com.gatbontontech.openvitals.hcc.refresh</string>
+		<string>com.gatbontontech.openvitals-hcc.hcc.healthkit-upload</string>
+		<string>com.gatbontontech.openvitals-hcc.hcc.refresh</string>
 	</array>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Command Center schedules the wake alarm you set from your sleep plan.</string>

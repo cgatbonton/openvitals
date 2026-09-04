@@ -17,7 +17,7 @@ final class HCCBackgroundRefresh {
   static let shared = HCCBackgroundRefresh()
 
   /// Declared in `Info.plist` under `BGTaskSchedulerPermittedIdentifiers`.
-  nonisolated static let taskIdentifier = "com.gatbontontech.openvitals.hcc.refresh"
+  nonisolated static let taskIdentifier = "com.gatbontontech.openvitals-hcc.hcc.refresh"
 
   /// Roughly hourly. iOS treats this as the earliest time, not a promise.
   private static let interval: TimeInterval = 60 * 60

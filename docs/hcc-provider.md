@@ -256,7 +256,7 @@ curl -s -X POST "$BASE/api/auth/mobile/login" -H 'Content-Type: application/json
 SIMCTL_CHILD_HCC_DEBUG_BASE_URL=http://localhost:3999 \
 SIMCTL_CHILD_HCC_DEBUG_TOKEN=hccm_… \
 SIMCTL_CHILD_HCC_DEBUG_SMOKE=1 \
-  xcrun simctl launch --console-pty booted com.gatbontontech.openvitals
+  xcrun simctl launch --console-pty booted com.gatbontontech.openvitals-hcc
 ```
 
 | Variable | Effect |
@@ -404,7 +404,7 @@ through both and diffing:
 
 ```sh
 # Swift: prints a 38-line block at launch
-SIMCTL_CHILD_HCC_DEBUG_531_CHECK=1 ... xcrun simctl launch --console-pty <udid> com.gatbontontech.openvitals
+SIMCTL_CHILD_HCC_DEBUG_531_CHECK=1 ... xcrun simctl launch --console-pty <udid> com.gatbontontech.openvitals-hcc
 # TypeScript: transpiles src/lib/fiveThreeOne.ts and prints the same block
 node <scratch>/pt-531.mjs
 ```
@@ -499,9 +499,9 @@ segments therefore produces no sleep row — correct here, since only Watch-reco
 sleep is uploaded and that is always staged.
 
 **Background.** `HKObserverQuery` + hourly background delivery per type, a daily
-`BGProcessingTaskRequest` (`com.gatbontontech.openvitals.hcc.healthkit-upload`),
+`BGProcessingTaskRequest` (`com.gatbontontech.openvitals-hcc.hcc.healthkit-upload`),
 and a background `URLSession`
-(`com.gatbontontech.openvitals.hcc.upload`) for sweeps that were not started from
+(`com.gatbontontech.openvitals-hcc.hcc.upload`) for sweeps that were not started from
 the foreground. Neither background delivery nor `BGTaskScheduler` works in the
 simulator; when either is refused the sheet says so instead of hiding it. Known
 gap: relaunching the app to hand it a finished background transfer needs
@@ -772,7 +772,7 @@ real switch, because that one IS the phone's decision.
 A widget process is woken with no session and a few hundred milliseconds of
 budget, so it cannot read the API. The app writes `summary.json`
 (`HCCWidgetSummary`, in `OpenVitals/HCC/Shared/`, compiled into both targets)
-into the App Group container `group.com.gatbontontech.openvitals` at the end of
+into the App Group container `group.com.gatbontontech.openvitals-hcc` at the end of
 every completed read, and the widgets draw that file. Nothing is computed on the
 widget side; `HCCWidgetBridge` copies the same `hcc.homeByDate` entry Home draws
 from, so the two can never disagree.
@@ -934,8 +934,8 @@ points at, so it belongs against a local test instance only.
 ## The watchOS companion (`HCCWatch`)
 
 A second, separate target — a "Watch App for iOS App", bundle id
-`com.gatbontontech.openvitals.watchkitapp`, `WKCompanionAppBundleIdentifier`
-pointing back at `com.gatbontontech.openvitals`. It shares **no code** with the
+`com.gatbontontech.openvitals-hcc.watchkitapp`, `WKCompanionAppBundleIdentifier`
+pointing back at `com.gatbontontech.openvitals-hcc`. It shares **no code** with the
 iPhone build: no HCC design system, no `HCCAPIClient`, no token, no server call.
 Four files under `HCCWatch/` and one screen.
 

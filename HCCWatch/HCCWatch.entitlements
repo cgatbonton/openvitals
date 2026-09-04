@@ -6,7 +6,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.gatbontontech.openvitals</string>
+		<string>group.com.gatbontontech.openvitals-hcc</string>
 	</array>
 </dict>
 </plist>

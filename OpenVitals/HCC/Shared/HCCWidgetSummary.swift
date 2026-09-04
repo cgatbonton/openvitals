@@ -73,7 +73,7 @@ struct HCCWidgetSummary: Codable, Equatable {
 /// being papered over: a widget stuck on "--" in the simulator is the App Group
 /// missing, not the data.
 enum HCCWidgetStore {
-  static let appGroup = "group.com.gatbontontech.openvitals"
+  static let appGroup = "group.com.gatbontontech.openvitals-hcc"
   static let fileName = "summary.json"
 
   /// The note appended to `reason` when the shared container is not available.
