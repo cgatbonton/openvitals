@@ -924,11 +924,13 @@
 				A30000000000000000000001 /* Frameworks */,
 				A60000000000000000000002 /* Resources */,
 				B60000000000000000000003 /* Embed App Extensions */,
+				E60000000000000000001604 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				B70000000000000000000002 /* PBXTargetDependency */,
+				E70000000000000000001602 /* PBXTargetDependency */,
 			);
 			name = OpenVitals;
 			productName = OpenVitals;
