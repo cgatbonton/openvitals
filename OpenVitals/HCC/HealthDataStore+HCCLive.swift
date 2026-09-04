@@ -64,6 +64,12 @@ final class HCCLiveState: ObservableObject {
   @Published private(set) var elapsed: TimeInterval = 0
 
   @Published private(set) var currentBpm: Int?
+  /// A reading taken while the setup sheet is open, before anything is being
+  /// recorded. Tapping "Start activity" should show a heart rate immediately —
+  /// that is the confirmation the right device is connected, and without it the
+  /// only way to find out was to start a session and hope.
+  @Published private(set) var previewBpm: Int?
+  private var previewTask: Task<Void, Never>?
   /// 0-based, matching the server's zone indices.
   @Published private(set) var currentZone: Int?
   @Published private(set) var zoneMs: [Double] = Array(repeating: 0, count: HCCZones.zoneCount)
@@ -282,6 +288,11 @@ extension HCCLiveState {
     isDefaultingSourceKind = true
     sourceKind = streaming
     isDefaultingSourceKind = false
+    // `/devices` usually lands AFTER the sheet is open, so this flip is what
+    // decides the source most of the time. `beginSetup` has already run its own
+    // scan check by then; without starting one here the screen sat waiting for
+    // a device nothing was looking for.
+    if phase == .setup, streaming == .bluetooth { startBluetoothScan() }
   }
 
   func adopt(zoneConfig: HCCZoneConfig?, restingHr: Double?) {
@@ -305,6 +316,20 @@ extension HCCLiveState {
       Task { @MainActor in self?.sourceStatus = status }
     }
     ble.startScanning()
+    // Scanning alone only lists devices. Connecting is what produces a reading,
+    // and the reading is the whole point of the screen — so setup connects too,
+    // and hands the samples to the preview rather than to the accumulator.
+    previewTask?.cancel()
+    previewTask = Task { [weak self] in
+      try? await ble.start()
+      for await sample in ble.samples {
+        guard let self else { return }
+        await MainActor.run {
+          guard !self.isLive else { return }
+          self.previewBpm = sample.bpm
+        }
+      }
+    }
   }
 
   func stopBluetoothScan() {
@@ -313,6 +338,11 @@ extension HCCLiveState {
 
   func start() async -> Bool {
     guard !isRunning else { return true }
+    // One consumer of the stream at a time: the preview must let go before the
+    // session's own drain takes over, or readings alternate between them.
+    previewTask?.cancel()
+    previewTask = nil
+    previewBpm = nil
     lastError = nil
     let source = makeSource()
     self.source = source

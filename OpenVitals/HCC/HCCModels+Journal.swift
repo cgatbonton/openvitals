@@ -82,12 +82,49 @@ struct HCCDueDose: Decodable, Equatable, Identifiable {
   /// `daily` or `cycling`. A cycling product skips days by design, so a blank
   /// day on one must not read as a missed dose.
   let cadence: String
+  /// When in the day it is taken: `breakfast` | `lunch` | `dinner` | `prebed` |
+  /// `anytime`. Derived SERVER-side from the dose link's note, so this app and
+  /// the web page bucket the schedule identically rather than each parsing the
+  /// same prose. Decoded leniently — an older instance sends no slot at all.
+  let slot: String?
 
   /// The (protocol, product) pair a dose belongs to. The server keys taken
   /// counts on the same pair, so this is the one identity the UI needs.
   var id: String { "\(protocolId)|\(productId ?? "")" }
 
   var isCycling: Bool { cadence == "cycling" }
+}
+
+/// The dose card's time-of-day sections, in the order they are taken.
+///
+/// A slot the server does not send, or one this build does not know, falls to
+/// `anytime` — an unrecognised value must surface as unscheduled, never be
+/// dropped from the card or filed under a meal it was not assigned to.
+enum HCCDoseSlot: String, CaseIterable {
+  case breakfast, lunch, dinner, prebed, anytime
+
+  init(server: String?) {
+    self = server.flatMap(HCCDoseSlot.init(rawValue:)) ?? .anytime
+  }
+
+  var label: String {
+    switch self {
+    case .breakfast: "Breakfast"
+    case .lunch: "Lunch"
+    case .dinner: "Dinner"
+    case .prebed: "Pre-bed"
+    case .anytime: "Anytime"
+    }
+  }
+}
+
+/// The due lines bucketed by slot, chronologically, with empty slots dropped —
+/// an empty "Lunch" heading is furniture, and worse, reads as a missed dose.
+func hccGroupDosesBySlot(_ due: [HCCDueDose]) -> [(slot: HCCDoseSlot, lines: [HCCDueDose])] {
+  HCCDoseSlot.allCases.compactMap { slot in
+    let lines = due.filter { HCCDoseSlot(server: $0.slot) == slot }
+    return lines.isEmpty ? nil : (slot, lines)
+  }
 }
 
 /// A dose that was actually taken.

@@ -369,6 +369,17 @@ and says nothing the card header does not. It survives only as the fallback for
 a protocol with **no linked product** (a free-text regimen), whose rows have no
 other name — drop that fallback and they render blank.
 
+The dose rows are **grouped by time of day** (Breakfast · Lunch · Dinner ·
+Pre-bed · Anytime), the way the printed schedule groups them. The slot is
+decided SERVER-side — `doseSlot` in the backend's `src/lib/journal/doses.ts`
+reads it off the dose link's free-text `notes`, since there is no timing column
+— and arrives on `HCCDueDose.slot`. Do not parse it again here: one parser, two
+renderers, or the phone and the web page will disagree about when a supplement
+is taken. A slot the server omits or this build does not recognise falls to
+**Anytime**; an unrecognised value must never be dropped from the card or filed
+under a meal it was not assigned to. Empty slots are not rendered — a bare
+"Lunch" heading reads as a missed dose.
+
 Files: `HCC/UI/HCCJournalView.swift` (the screen and every
 number-to-string helper), `HCC/UI/HCCJournalSections.swift` (the rows,
 presentation only), `HCC/HCCModels+Journal.swift` (DTOs),

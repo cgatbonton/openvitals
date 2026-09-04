@@ -323,7 +323,8 @@ private extension HCCDueDose {
       dueCount: dueCount,
       takenCount: max(0, takenCount + delta),
       expectedPerDay: expectedPerDay,
-      cadence: cadence
+      cadence: cadence,
+      slot: slot
     )
   }
 }

@@ -38,6 +38,7 @@ struct HCCLiveSetupSheet: View {
         subtitle: titleOverride ?? "Records heart rate while you train"
       )
 
+      livePreview
       fields
       if let note = HCCLiveCopy.selectedDeviceNote(state: state) {
         HCCFootnote(note)
@@ -82,6 +83,32 @@ struct HCCLiveSetupSheet: View {
   }
 
   // ── Fields ─────────────────────────────────────────────────────────────────
+
+  /// The reading, before anything is being recorded.
+  ///
+  /// This is the screen's answer to "is the right device actually on my wrist
+  /// and talking to this phone" — the question a source picker alone cannot
+  /// settle. A dash and the source's own sentence while it is still looking;
+  /// never a number that is not currently arriving.
+  private var livePreview: some View {
+    VStack(spacing: 4) {
+      HStack(alignment: .firstTextBaseline, spacing: 4) {
+        Text(state.previewBpm.map(String.init) ?? "--")
+          .font(HCCTheme.Font.display(size: 44, weight: .medium))
+          .foregroundStyle(state.previewBpm == nil ? HCCTheme.Color.muted : HCCTheme.Color.text)
+          .monospacedDigit()
+        Text("bpm")
+          .font(HCCTheme.Font.body(size: 13, weight: .medium))
+          .foregroundStyle(HCCTheme.Color.muted)
+      }
+      Text(state.sourceStatus ?? "Looking for \(state.sourceKind.label)...")
+        .font(HCCTheme.Font.body(size: 11.5))
+        .foregroundStyle(HCCTheme.Color.muted)
+        .multilineTextAlignment(.center)
+    }
+    .frame(maxWidth: .infinity)
+    .hccCard()
+  }
 
   private var fields: some View {
     VStack(spacing: 0) {

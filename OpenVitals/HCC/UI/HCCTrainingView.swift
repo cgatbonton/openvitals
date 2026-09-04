@@ -159,8 +159,7 @@ struct HCCTrainingView: View {
         onPick: { choice in
           state.pickerDate = nil
           Task { await store.setHCCTrainingDayPlan(date: pickerDate, choice: choice) }
-        },
-        onClose: { state.pickerDate = nil }
+        }
       )
     }
 

@@ -213,8 +213,19 @@ private struct HCCJournalScreen: View {
         if day.due.isEmpty {
           HCCEmptyNote("No doses due from active protocols.")
         } else {
-          ForEach(Array(day.due.enumerated()), id: \.element.id) { index, due in
-            doseRow(due, showsDivider: index < day.due.count - 1)
+          // Grouped by when it is taken, the way the printed sheet groups it.
+          // The slot is decided SERVER-side (`doseSlot` in the backend's
+          // journal/doses.ts) so this card and the web page bucket identically.
+          let groups = hccGroupDosesBySlot(day.due)
+          ForEach(Array(groups.enumerated()), id: \.element.slot) { groupIndex, group in
+            HCCLabel(group.slot.label, size: 10)
+              .padding(.top, groupIndex == 0 ? 0 : 12)
+              .padding(.bottom, 6)
+            ForEach(Array(group.lines.enumerated()), id: \.element.id) { index, due in
+              // The divider closes each section, so the last row of a group
+              // does not draw a line into the next group's heading.
+              doseRow(due, showsDivider: index < group.lines.count - 1)
+            }
           }
         }
       } else if hasLoaded {
