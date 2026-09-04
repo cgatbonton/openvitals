@@ -41,7 +41,21 @@ final class HCCLiveState: ObservableObject {
   /// Set when the session was started from a Training conditioning day, so the
   /// stored row is named after that day rather than a generic slug.
   @Published var titleOverride: String?
-  @Published var sourceKind: HCCLiveSourceKind = .watch
+  @Published var sourceKind: HCCLiveSourceKind = .watch {
+    didSet {
+      guard oldValue != sourceKind, !isDefaultingSourceKind else { return }
+      sourceKindChosenByOwner = true
+    }
+  }
+  /// True once the picker has been touched, so reopening the sheet does not
+  /// overwrite a deliberate choice with the device pill's default.
+  private var sourceKindChosenByOwner = false
+  private var isDefaultingSourceKind = false
+
+  /// The wrist device currently driving the display, in the server's own words
+  /// ("Band", "Fitbit Air"), and whether it can stream a live reading at all.
+  @Published private(set) var selectedDeviceLabel: String?
+  @Published private(set) var selectedDeviceCanStream = true
   /// 1-based, as the chip reads it ("goal: Z2").
   @Published var goalZone: Int = 2
 
@@ -158,7 +172,7 @@ extension HealthDataStore {
   /// resting HR, and start looking for Bluetooth devices if that is the pick.
   func prepareHCCLive(titleOverride: String? = nil) {
     let state = hccLive
-    state.beginSetup(titleOverride: titleOverride)
+    state.beginSetup(titleOverride: titleOverride, drivingDevice: hccDrivingDevice())
     applyHCCLiveZoneConfig()
   }
 
@@ -170,6 +184,10 @@ extension HealthDataStore {
   /// publishes, flagged as such.
   func applyHCCLiveZoneConfig() {
     let state = hccLive
+    // `/devices` lands with the session reads, which on a cold launch finish
+    // after this sheet is already on screen. Re-reading here is what lets the
+    // pill pick the source; doing it only at setup left both silent.
+    state.adoptDrivingDevice(hccDrivingDevice())
     let day = Self.hccDayKey(Date())
     state.adopt(
       zoneConfig: hcc.instance?.zones,
@@ -241,16 +259,29 @@ extension HealthDataStore {
 // ── The machine ──────────────────────────────────────────────────────────────
 
 extension HCCLiveState {
-  func beginSetup(titleOverride: String?) {
+  func beginSetup(titleOverride: String?, drivingDevice: HCCDevice? = nil) {
     guard !isLive else { return }
     self.titleOverride = titleOverride
     lastError = nil
     resultActivity = nil
     phase = .setup
+    adoptDrivingDevice(drivingDevice)
     #if DEBUG
     if HCCDebugHeartRateSource.isRequested, sourceKind != .debug { sourceKind = .debug }
     #endif
     if sourceKind == .bluetooth { startBluetoothScan() }
+  }
+
+  /// Point the live source at whatever the selected device can actually
+  /// stream. Never overrides a pick the owner made themselves.
+  func adoptDrivingDevice(_ device: HCCDevice?) {
+    selectedDeviceLabel = device?.label
+    let streaming = HCCLiveSourceKind.streaming(for: device?.source)
+    selectedDeviceCanStream = device == nil || streaming != nil
+    guard let streaming, !sourceKindChosenByOwner else { return }
+    isDefaultingSourceKind = true
+    sourceKind = streaming
+    isDefaultingSourceKind = false
   }
 
   func adopt(zoneConfig: HCCZoneConfig?, restingHr: Double?) {

@@ -39,6 +39,9 @@ struct HCCLiveSetupSheet: View {
       )
 
       fields
+      if let note = HCCLiveCopy.selectedDeviceNote(state: state) {
+        HCCFootnote(note)
+      }
       if state.sourceKind == .bluetooth { deviceCard }
       goalCard
 
@@ -236,6 +239,26 @@ enum HCCLiveCopy {
     "Live heart rate needs a streaming source: Apple Watch through the companion "
       + "Watch app, the band's Bluetooth broadcast, or a chest strap. The Fitbit "
       + "Air syncs after the fact."
+
+  /// What the device pill means here, when it means anything.
+  ///
+  /// The pill picks which device's STORED readings drive the rings. A live
+  /// number is a radio stream, so the two only line up for a device that can
+  /// broadcast. When they do line up this says so; when they cannot it says
+  /// which device is being used instead, rather than letting the screen wait
+  /// on a reading that is never coming.
+  static func selectedDeviceNote(state: HCCLiveState) -> String? {
+    guard let device = state.selectedDeviceLabel else { return nil }
+    if !state.selectedDeviceCanStream {
+      return "\(device) drives your rings, but it has no live feed — it syncs "
+        + "after the session. This reading comes from the source above instead."
+    }
+    if state.sourceKind == .bluetooth {
+      return "\(device) drives your rings and can broadcast live heart rate. "
+        + "Switch its broadcast on in its own app and it appears below."
+    }
+    return "\(device) drives your rings and streams live through the companion app."
+  }
 
   static func goalFootnote(zone: Int, state: HCCLiveState) -> String {
     let config = state.zoneConfig

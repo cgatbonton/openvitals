@@ -25,6 +25,7 @@ struct HCCAlarmSheet: View {
   @State private var minutesFromMidnight = 0
   @State private var mode = "exact"
   @State private var isOn = true
+  /// Carried, not shown — see the note under `settingsCard`.
   @State private var watchHaptic = true
   @State private var smartWindowMin = 30
   @State private var showsWheel = false
@@ -56,7 +57,7 @@ struct HCCAlarmSheet: View {
         secondary: HCCButtonSpec(title: "Cancel", isEnabled: !isSaving) { dismiss() }
       )
 
-      HCCFootnote("Saving writes the wake time your Command Center reasons about, then schedules it on this iPhone.")
+      HCCFootnote("Saving writes the wake time your Command Center reasons about, then schedules it on this iPhone. WHOOP and Fitbit alarms can only be set in their own apps — neither offers a way to write one from here.")
         .padding(.top, 10)
     }
     .onAppear {
@@ -87,7 +88,6 @@ struct HCCAlarmSheet: View {
       )
 
       HCCToggleRow(title: "Alarm on", isOn: $isOn)
-      HCCToggleRow(title: "Haptic on Apple Watch", isOn: $watchHaptic)
 
       HCCFieldRow(title: "Smart wake window", showsDivider: false) {
         HCCStepper(value: $smartWindowMin, range: 0...60, step: 5, suffix: "min")
@@ -95,6 +95,21 @@ struct HCCAlarmSheet: View {
     }
     .hccCard()
   }
+
+  /// REMOVED 2026-09-03: a "Haptic on Apple Watch" toggle sat here and did
+  /// nothing — the flag reached the server row and no reader, on the phone or
+  /// the watch target, ever consumed it. A control that does nothing is worse
+  /// than no control. `watchHaptic` is still carried through `edited` so a save
+  /// from this screen preserves whatever the server holds; it is not presented
+  /// as a choice until something acts on it.
+  ///
+  /// This alarm rings on THIS IPHONE and nowhere else, and no picker can honestly
+  /// be offered: WHOOP's v2 API is read-only (no alarm or haptic endpoint
+  /// exists, and the account's scopes are all `read:*`), and the Fitbit Air's
+  /// alarms live in the Google Health app, whose API exposes data types, data
+  /// points and a read-only paired-device list — no alarm surface. The only
+  /// route to the band is upstream's BLE `setWhoopAlarm`, which cloud mode does
+  /// not wire up. Do not add a device picker without one of those becoming true.
 
   private var timePicker: some View {
     VStack(spacing: 0) {

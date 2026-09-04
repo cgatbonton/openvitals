@@ -47,6 +47,24 @@ enum HCCLiveSourceKind: String, CaseIterable, Identifiable, Hashable {
 
   var id: String { rawValue }
 
+  /// The live source the wrist device currently driving the display can offer,
+  /// or `nil` when it cannot stream at all.
+  ///
+  /// The device pill is a display preference over STORED data; a live reading
+  /// is a radio stream into this phone, and the two are not the same question.
+  /// A watch mirrors its workout session to us. A band with a standard
+  /// heart-rate broadcast is reachable over Bluetooth once that broadcast is
+  /// switched on in the band's own app. Everything else — anything that only
+  /// syncs to a cloud we later read — has no live path, and saying so is
+  /// better than opening a screen that waits forever.
+  static func streaming(for deviceSource: String?) -> HCCLiveSourceKind? {
+    switch deviceSource {
+    case "APPLE_HEALTH": .watch
+    case "WHOOP": .bluetooth
+    default: nil
+    }
+  }
+
   /// The header's middle term ("Assault bike · Apple Watch · zone 2 goal").
   var label: String {
     switch self {
