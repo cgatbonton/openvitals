@@ -170,6 +170,20 @@ enum HCCFiveThreeOne {
     return (week, projected, cyclesAhead)
   }
 
+  /// How many program weeks a calendar-week offset actually moves the wave.
+  ///
+  /// Mirrors `programWeekOffset` in `src/lib/fiveThreeOne.ts`. The cycle's
+  /// `week` says where the wave sits, not which calendar week that is, and
+  /// nothing advances it but the owner pressing the button — so one program
+  /// week per calendar week is right only once the current week's wave has been
+  /// trained. A cycle with no logged sessions has not spent its current week,
+  /// and the next calendar week is still that same week. Without this, dropping
+  /// the training maxes late in a week skips the new wave's 5s week outright.
+  static func programWeekOffset(_ calendarWeekOffset: Int, cycleHasSessions: Bool) -> Int {
+    if calendarWeekOffset <= 0 || cycleHasSessions { return calendarWeekOffset }
+    return calendarWeekOffset - 1
+  }
+
   /// How a strength day is named, everywhere: the lifts in the order they run.
   static func strengthTitle(_ lifts: [HCCLiftKey]) -> String {
     lifts.map(\.label).joined(separator: " + ")

@@ -356,6 +356,53 @@ card clears the tab bar; the bar is laid out UNDER each tab's stack in
 inside the per-tab `NavigationStack`s, and the last row sat under the bar by
 exactly its height).
 
+## The Health Tab
+
+`HCCHealthView` is a thin switch; everything the screen does lives in
+`HCCHealthLanding` (its own struct so its `@StateObject` loaders are actually
+installed — reaching into another instance for a sub-view left them unobserved
+and every card stuck on "Loading…"). Top to bottom:
+
+1. the four reference cards — **Biomarkers · Insights · Genetics · Protocols** —
+   each with a counted subtitle and a push into its page;
+2. **Key vitals**, the web command page's curated six;
+3. the **Health monitor**, the wearable streams over their optimal bands;
+4. **Active insights**, the web command page's "Active flags".
+
+The order is Chris's (2026-09-06): key vitals above the monitor, active insights
+below it.
+
+**Both new cards ride `/home`, which the phone already decoded and drew
+nowhere.** `HCCHome.vitals` and `HCCHome.flags` were on the wire and on
+`HCCMetricView`/`HCCInsightCard` from the start; no server work was needed for
+either card. The selection, the ordering and the cap are the server's — six
+curated markers, and the ACTIVE risk/safety/trend cards ranked by severity.
+
+**Neither list is day-scoped, so any cached day answers for them.** The server
+reads current metric values and every ACTIVE card without consulting the `date`
+parameter, so the landing takes `homeByDate[today] ?? homeByDate.values.first`.
+A day the phone has not fetched is not an empty answer, and the fallback is not
+a stale-day claim. What it is NOT allowed to do is show an empty card for a
+payload that has not arrived: absent means `HCCLoadingNote`, present-and-empty
+means "Nothing flagged" — different answers, different renderings.
+
+**The key-vitals dot is the server's grading against the OPTIMAL target**, never
+a lab reference range, which is why the card says so in a footnote. An
+unrecognised status word draws muted rather than being coloured green by
+default.
+
+**The severity rules have one home.** `HCCStatusDot.severityStatus` and
+`HCCPill.Tone.severity` in `HCCComponents.swift` carry the dot rule and the pill
+tone for `INFO | LOW | MEDIUM | HIGH | CRITICAL`. The Insights page reads them
+from there too — the short row here and the full card there must never colour
+one card two ways.
+
+**Tapping a row opens the web page's hover card as a sheet.** A hover has no
+phone equivalent, so both row kinds present one: `HCCBiomarkerDetailSheet` for a
+key vital (also used by the Biomarkers screen) and `HCCInsightDetailSheet` for a
+flag. Neither sheet grades anything — status, comparison and trend are the
+server's own sentences.
+
 ## The Journal Tab
 
 `HCCJournalView` is the Journal tab in cloud mode. Three cards: **Doses** (what
@@ -504,9 +551,35 @@ and on the last week actually trained — a server answer — so a third week wo
 have to be guessed, and a guessed week is a wrong week.
 
 **Tapping a day opens its picker.** The mockup's strip changes what a day is; it
-does not move a selection. Only today's body is rendered, plus a preview of the
-next strength day. Logging a past day, which the web page allows by selecting it,
-is not on the phone.
+does not move a selection.
+
+**The whole shown week is rendered, both weeks through one path.** REVISED
+2026-09-06 (Chris: "this week is not showing my workouts"). It used to draw
+TODAY plus the next strength day still ahead in the week, and next week as one
+summary line per day ending in "top set 105 kg". Both were wrong for the same
+reason. On a Sunday whose plan says rest there is no today-card and no strength
+day left, so this week rendered *nothing* while two logged sessions sat in the
+payload; and a summary line answers "how heavy" when the question is "what am I
+doing". `weekBody` now renders every day of the shown week that is not an empty
+rest day: days behind today show what was logged, today keeps its Start button,
+days ahead are previews without one. A rest day with a session logged on it is
+still drawn — a day that was trained is a day that happened, whatever the plan
+called it. `isPreview` is `day.date > todayYmd` and nothing else; day keys are
+`YYYY-MM-DD`, where string order is date order.
+
+**A calendar week does not cost a program week.** `TrainingCycle.week` says
+where the wave sits, not which calendar week that is, and only the owner's
+button moves it. Projecting `+1` program week per calendar week — which both
+clients did — skips a week the moment a cycle is opened without being trained:
+drop the training maxes on a Friday, after that week's work was already logged
+under the OLD cycle, and next week previews as the 3s week while the new wave's
+5s week is never shown at all. `programWeekOffset(calendarWeekOffset,
+cycleHasSessions)` in `src/lib/fiveThreeOne.ts`, mirrored here, is the rule: a
+cycle with no logged sessions has not spent its current week, so the next
+calendar week is still that week. It resumes stepping forward the moment the
+first session of the cycle is logged. Both clients call it; neither re-derives
+it. (Found 2026-09-06 on cycle 3 week 1, opened 09-04 with reduced maxes and
+zero sessions.)
 
 **"Start live activity" is not drawn.** `HCCTrainingView.liveActivityIsAvailable`
 is a static `false` until the live workout screen exists. A control that cannot

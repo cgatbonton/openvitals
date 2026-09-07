@@ -130,7 +130,13 @@ struct HCCTrainingView: View {
     let projected = HCCFiveThreeOne.projectWave(
       anchorWeek: cycle.week,
       tms: cycle.tmsByLift,
-      weekOffset: state.weekOffset
+      // A cycle nobody has trained yet has not spent its current week, so the
+      // next calendar week is still that week — otherwise a mid-week reset of
+      // the training maxes skips the new wave's 5s week. Same rule as the web.
+      weekOffset: HCCFiveThreeOne.programWeekOffset(
+        state.weekOffset,
+        cycleHasSessions: !data.cycleSessions.isEmpty
+      )
     )
 
     HCCTrainingWeekCard(
@@ -163,17 +169,13 @@ struct HCCTrainingView: View {
       )
     }
 
-    if state.weekOffset == 0 {
-      todayBody(data: data, cycle: cycle, days: days, week: projected.week, tms: projected.tms)
-    } else {
-      nextWeekPreview(
-        data: data,
-        cycle: cycle,
-        days: days,
-        week: projected.week,
-        tms: projected.tms
-      )
-    }
+    weekBody(
+      data: data,
+      cycle: cycle,
+      days: days,
+      week: projected.week,
+      tms: projected.tms
+    )
 
     ForEach(Array(Self.liftOrder.enumerated()), id: \.element) { offset, lift in
       HCCTrainingProgressionCard(
@@ -199,30 +201,70 @@ struct HCCTrainingView: View {
       : "Defaults copied from this week. Tap a day to change it."
   }
 
-  // ── This week: today, then the next strength day ───────────────────────────
+  // ── The shown week ─────────────────────────────────────────────────────────
 
+  /// Every day of the shown week that is not an empty rest day, in order — this
+  /// week and next week through the same path.
+  ///
+  /// It used to render TODAY plus the next strength day later in the week, and
+  /// nothing else. On a Sunday whose plan says rest, that is a blank screen: the
+  /// two days actually trained that week were on the phone nowhere, while the
+  /// web page reaches any of them by tapping the strip. A week view that hides
+  /// the week is not a week view.
   @ViewBuilder
-  private func todayBody(
+  private func weekBody(
     data: HCCTrainingData,
     cycle: HCCTrainingCycle,
     days: [HCCResolvedDay],
     week: Int,
     tms: [HCCLiftKey: Double]
   ) -> some View {
-    if let today = days.first(where: { $0.date == data.todayYmd }) {
-      dayCards(day: today, data: data, cycle: cycle, week: week, tms: tms, label: "Today", isPreview: false)
+    // A rest day is dropped, unless something was logged on it anyway — then it
+    // is a day that happened, whatever the plan called it.
+    let shown = days.filter { $0.option != .rest || !data.sessions(on: $0.date).isEmpty }
 
-      // "Up next" — the next STRENGTH day later in the shown week, previewed.
-      if let todayIndex = days.firstIndex(where: { $0.date == data.todayYmd }),
-         let next = days[(todayIndex + 1)...].first(where: { $0.option == .strength }) {
-        HCCSectionHeader(
-          title: "Up next · \(HCCTrainingFormat.shortDow(next.date)) \(HCCTrainingFormat.dayNumber(next.date))"
-        )
-        dayCards(day: next, data: data, cycle: cycle, week: week, tms: tms, label: "Preview", isPreview: true)
-      }
-    } else {
-      HCCEmptyNote("This week has not been resolved yet.").hccCard()
+    if state.weekOffset > 0 {
+      HCCSectionHeader(title: "Next week")
+      HCCFootnote(
+        "Week \(week) — \(HCCFiveThreeOne.weekLabel(week)). Nothing here has been started; "
+          + "the numbers come from that week's training maxes."
+      )
     }
+
+    if days.isEmpty {
+      HCCEmptyNote("This week has not been resolved yet.").hccCard()
+    } else if shown.isEmpty {
+      HCCEmptyNote(state.weekOffset == 0 ? "Every day this week is rest." : "Every day next week is rest.")
+        .hccCard()
+    } else {
+      ForEach(shown, id: \.date) { day in
+        HCCSectionHeader(title: Self.dayHeading(day: day, todayYmd: data.todayYmd))
+        dayCards(
+          day: day,
+          data: data,
+          cycle: cycle,
+          week: week,
+          tms: tms,
+          label: Self.dayLabel(day: day, todayYmd: data.todayYmd),
+          // Only a day that has not arrived is a preview. Today and the days
+          // behind it happened, so they start, log and mark like today always
+          // did. Day keys are 'YYYY-MM-DD', where string order IS date order.
+          isPreview: day.date > data.todayYmd
+        )
+      }
+    }
+  }
+
+  private static func dayHeading(day: HCCResolvedDay, todayYmd: String) -> String {
+    guard day.date != todayYmd else { return "Today" }
+    return "\(HCCTrainingFormat.shortDow(day.date)) \(HCCTrainingFormat.dayNumber(day.date))"
+  }
+
+  /// The pill each card carries: where this day sits relative to now. Never a
+  /// claim about what happened on it — the card's own rows say that.
+  private static func dayLabel(day: HCCResolvedDay, todayYmd: String) -> String {
+    if day.date == todayYmd { return "Today" }
+    return day.date < todayYmd ? "Earlier" : "Preview"
   }
 
   /// A day, drawn as one card per lift for a strength day and one card for a
@@ -423,49 +465,6 @@ struct HCCTrainingView: View {
 
   /// The next week is a preview, not a log: one line per day with the top set of
   /// each lift, which is the number that tells the owner how heavy the week is.
-  /// Next week, drawn the way the web page draws a day in a future week: every
-  /// non-rest day in full, each strength day carrying the sets and reps its
-  /// training maxes generate.
-  ///
-  /// This used to be one line per day ending in "top set 105 kg". The top set
-  /// is not the workout — the prescription is — and a week you are looking at
-  /// in order to plan it is exactly when you need the reps.
-  @ViewBuilder
-  private func nextWeekPreview(
-    data: HCCTrainingData,
-    cycle: HCCTrainingCycle,
-    days: [HCCResolvedDay],
-    week: Int,
-    tms: [HCCLiftKey: Double]
-  ) -> some View {
-    let shown = days.filter { $0.option != .rest }
-
-    HCCSectionHeader(title: "Next week")
-    HCCFootnote(
-      "Week \(week) — \(HCCFiveThreeOne.weekLabel(week)). Nothing here has been started; "
-        + "the numbers come from that week's training maxes."
-    )
-
-    if shown.isEmpty {
-      HCCEmptyNote("Every day next week is rest.").hccCard()
-    } else {
-      ForEach(shown, id: \.date) { day in
-        HCCSectionHeader(
-          title: "\(HCCTrainingFormat.shortDow(day.date)) \(HCCTrainingFormat.dayNumber(day.date))"
-        )
-        dayCards(
-          day: day,
-          data: data,
-          cycle: cycle,
-          week: week,
-          tms: tms,
-          label: "Preview",
-          isPreview: true
-        )
-      }
-    }
-  }
-
   // ── Wave controls ──────────────────────────────────────────────────────────
 
   /// Exactly the controls the web page offers in each state, and no others.
