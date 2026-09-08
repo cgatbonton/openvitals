@@ -101,10 +101,11 @@ struct HCCTrainingWeekCard: View {
   let days: [HCCResolvedDay]
   let sessions: [HCCTrainingSession]
   let weekOffset: Int
-  let editingDate: String?
+  /// The day the tab is showing. Its tile carries the accent wash.
+  let selectedDate: String?
   let helper: String
   let onShift: (Int) -> Void
-  let onPickDay: (String) -> Void
+  let onSelectDay: (String) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -156,15 +157,15 @@ struct HCCTrainingWeekCard: View {
   }
 
   /// `.wk.big span` — weekday, date, short workout tag; a dot when the day has
-  /// work on it, an accent border on today, an accent wash while its picker is
-  /// open.
+  /// work on it, an accent border on today, an accent wash on the selected day
+  /// (the one the card below is showing).
   private func dayTile(_ day: HCCResolvedDay) -> some View {
     let isToday = day.date == todayYmd
-    let isEditing = day.date == editingDate
+    let isSelected = day.date == selectedDate
     let hasWork = day.option != .rest
     let isDone = sessions.contains { $0.dateYmd == day.date && $0.status == .done }
 
-    return Button { onPickDay(day.date) } label: {
+    return Button { onSelectDay(day.date) } label: {
       VStack(spacing: 3) {
         Text(HCCTrainingFormat.shortDow(day.date))
           .font(HCCTheme.Font.data(size: 10, weight: .semibold))
@@ -196,7 +197,7 @@ struct HCCTrainingWeekCard: View {
       }
       .background(
         RoundedRectangle(cornerRadius: 8, style: .continuous)
-          .fill(isEditing ? HCCTheme.Color.accent.opacity(0.22) : HCCTheme.Color.card2)
+          .fill(isSelected ? HCCTheme.Color.accent.opacity(0.22) : HCCTheme.Color.card2)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -205,10 +206,11 @@ struct HCCTrainingWeekCard: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     .accessibilityLabel(
       "\(HCCTrainingFormat.longDow(day.date)) \(HCCTrainingFormat.dayNumber(day.date)), \(day.title)"
     )
-    .accessibilityHint("Change what this day is")
+    .accessibilityHint("Show this day")
   }
 }
 

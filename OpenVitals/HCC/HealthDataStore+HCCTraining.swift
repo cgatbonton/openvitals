@@ -37,8 +37,15 @@ final class HCCTrainingState: ObservableObject {
   /// fetched or guessed.
   @Published var weekOffset: Int = 0
 
-  /// The day whose picker is open, if any.
-  @Published var pickerDate: String?
+  /// The day the tab is showing — its card, and the picker under it. `nil` until
+  /// the first render resolves it (today when today is in the shown week, else
+  /// that week's first day), so the state does not have to know the payload.
+  ///
+  /// This used to be `pickerDate`, a toggle that only opened a picker while the
+  /// body rendered every day of the week at once. REVISED 2026-09-08 (Chris:
+  /// "when I tap on a specific day it shows the workouts for multiple days") —
+  /// tapping a day now moves this selection, and the body draws that day alone.
+  @Published var selectedDate: String?
 
   /// Set once a pick lands on a next-week date, so the strip stops claiming the
   /// whole week is still inherited from this one.

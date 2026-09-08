@@ -139,32 +139,48 @@ struct HCCTrainingView: View {
       )
     )
 
+    // The day being shown. Never trusted straight from state: a stored pick can
+    // be a date in the other week (the strip toggles between two), so it only
+    // counts when the shown week actually contains it. Today is the fallback
+    // when today is in view; otherwise the first day of the week is.
+    let selected =
+      days.first { $0.date == state.selectedDate }
+      ?? days.first { $0.date == data.todayYmd }
+      ?? days.first
+
     HCCTrainingWeekCard(
       weekStart: weekStart,
       todayYmd: data.todayYmd,
       days: days,
       sessions: data.sessions,
       weekOffset: state.weekOffset,
-      editingDate: state.pickerDate,
+      selectedDate: selected?.date,
       helper: helperText,
       onShift: { delta in
-        state.weekOffset = min(1, max(0, state.weekOffset + delta))
-        state.pickerDate = nil
+        let next = min(1, max(0, state.weekOffset + delta))
+        guard next != state.weekOffset else { return }
+        // Keep the same weekday across the jump, except when landing back on the
+        // real calendar week, where today is the more useful default. The web
+        // strip's rule, so both clients move the selection the same way.
+        let carried = selected?.date ?? data.todayYmd
+        state.weekOffset = next
+        state.selectedDate =
+          next == 0 ? data.todayYmd : HCCFiveThreeOne.addDays(carried, 7)
       },
-      onPickDay: { date in
-        state.pickerDate = state.pickerDate == date ? nil : date
-      }
+      onSelectDay: { date in state.selectedDate = date }
     )
     .id(HCCTrainingAnchor.week.rawValue)
 
-    if let pickerDate = state.pickerDate {
+    // Always on screen, for whichever day is selected — it is how a day's
+    // workout is changed, so it is not something to go hunting for behind a
+    // second tap (Chris, 2026-09-08).
+    if let day = selected {
       HCCTrainingPickerCard(
-        dayKey: pickerDate,
-        current: days.first { $0.date == pickerDate },
+        dayKey: day.date,
+        current: day,
         isEnabled: !state.isWriting,
         onPick: { choice in
-          state.pickerDate = nil
-          Task { await store.setHCCTrainingDayPlan(date: pickerDate, choice: choice) }
+          Task { await store.setHCCTrainingDayPlan(date: day.date, choice: choice) }
         }
       )
     }
@@ -174,7 +190,8 @@ struct HCCTrainingView: View {
       cycle: cycle,
       days: days,
       week: projected.week,
-      tms: projected.tms
+      tms: projected.tms,
+      selected: selected
     )
 
     ForEach(Array(Self.liftOrder.enumerated()), id: \.element) { offset, lift in
@@ -195,34 +212,37 @@ struct HCCTrainingView: View {
   private static let liftOrder: [HCCLiftKey] = [.squat, .bench, .deadlift, .press]
 
   private var helperText: String {
-    if state.weekOffset == 0 { return "Tap a day to change its workout or log it." }
+    if state.weekOffset == 0 { return "Tap a day to show it." }
     return state.nextWeekEdited
       ? "Edited. Other days still default to this week's pattern."
-      : "Defaults copied from this week. Tap a day to change it."
+      : "Defaults copied from this week. Tap a day to show it."
   }
 
   // ── The shown week ─────────────────────────────────────────────────────────
 
-  /// Every day of the shown week that is not an empty rest day, in order — this
-  /// week and next week through the same path.
+  /// The selected day of the shown week, and only it.
   ///
-  /// It used to render TODAY plus the next strength day later in the week, and
-  /// nothing else. On a Sunday whose plan says rest, that is a blank screen: the
-  /// two days actually trained that week were on the phone nowhere, while the
-  /// web page reaches any of them by tapping the strip. A week view that hides
-  /// the week is not a week view.
+  /// History, because this has moved twice. It first drew TODAY plus the next
+  /// strength day still ahead — on a Sunday whose plan says rest that is a blank
+  /// screen, with the week's logged sessions nowhere on the phone. So it went to
+  /// every non-rest day of the week at once, which fixed the hiding but stacked
+  /// several days' workouts under one tap (Chris, 2026-09-08: "it shows the
+  /// workouts for multiple days"). Now it draws exactly the day the strip has
+  /// selected, which is the web page's behaviour.
+  ///
+  /// The week is still not hidden: the strip above carries all seven days with
+  /// their tags and their done marks, so any of them is one tap away. And a rest
+  /// day is now reachable — it was filtered out entirely before, so a day the
+  /// plan called rest could not be inspected or given a workout from here.
   @ViewBuilder
   private func weekBody(
     data: HCCTrainingData,
     cycle: HCCTrainingCycle,
     days: [HCCResolvedDay],
     week: Int,
-    tms: [HCCLiftKey: Double]
+    tms: [HCCLiftKey: Double],
+    selected: HCCResolvedDay?
   ) -> some View {
-    // A rest day is dropped, unless something was logged on it anyway — then it
-    // is a day that happened, whatever the plan called it.
-    let shown = days.filter { $0.option != .rest || !data.sessions(on: $0.date).isEmpty }
-
     if state.weekOffset > 0 {
       HCCSectionHeader(title: "Next week")
       HCCFootnote(
@@ -233,25 +253,20 @@ struct HCCTrainingView: View {
 
     if days.isEmpty {
       HCCEmptyNote("This week has not been resolved yet.").hccCard()
-    } else if shown.isEmpty {
-      HCCEmptyNote(state.weekOffset == 0 ? "Every day this week is rest." : "Every day next week is rest.")
-        .hccCard()
-    } else {
-      ForEach(shown, id: \.date) { day in
-        HCCSectionHeader(title: Self.dayHeading(day: day, todayYmd: data.todayYmd))
-        dayCards(
-          day: day,
-          data: data,
-          cycle: cycle,
-          week: week,
-          tms: tms,
-          label: Self.dayLabel(day: day, todayYmd: data.todayYmd),
-          // Only a day that has not arrived is a preview. Today and the days
-          // behind it happened, so they start, log and mark like today always
-          // did. Day keys are 'YYYY-MM-DD', where string order IS date order.
-          isPreview: day.date > data.todayYmd
-        )
-      }
+    } else if let day = selected {
+      HCCSectionHeader(title: Self.dayHeading(day: day, todayYmd: data.todayYmd))
+      dayCards(
+        day: day,
+        data: data,
+        cycle: cycle,
+        week: week,
+        tms: tms,
+        label: Self.dayLabel(day: day, todayYmd: data.todayYmd),
+        // Only a day that has not arrived is a preview. Today and the days
+        // behind it happened, so they start, log and mark like today always
+        // did. Day keys are 'YYYY-MM-DD', where string order IS date order.
+        isPreview: day.date > data.todayYmd
+      )
     }
   }
 
@@ -610,7 +625,7 @@ struct HCCTrainingView: View {
       state.weekOffset = 1
     }
     if let day = ProcessInfo.processInfo.environment["HCC_DEBUG_TRAINING_PICKER"], !day.isEmpty {
-      state.pickerDate = day
+      state.selectedDate = day
     }
     #endif
   }

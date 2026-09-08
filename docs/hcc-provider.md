@@ -560,22 +560,47 @@ week the payload carries and the one after it, per the mockup's
 and on the last week actually trained — a server answer — so a third week would
 have to be guessed, and a guessed week is a wrong week.
 
-**Tapping a day opens its picker.** The mockup's strip changes what a day is; it
-does not move a selection.
+**Tapping a day selects it.** REVISED 2026-09-08 (Chris: "when I tap on a
+specific day it shows the workouts for multiple days"). The strip used to be a
+plan editor only — a tap opened that day's picker and moved nothing — because the
+mockup's strip changes what a day is. It is now a day picker as well, matching the
+web strip: the tap moves `HCCTrainingState.selectedDate`, and the body below draws
+that day. The plan picker did not move behind a gesture; it is simply **always on
+screen** for the selected day, which is Chris's own call over a long-press or a
+per-tile pencil ("the plan picker should always be visible"). Picking a workout no
+longer closes it.
 
-**The whole shown week is rendered, both weeks through one path.** REVISED
-2026-09-06 (Chris: "this week is not showing my workouts"). It used to draw
-TODAY plus the next strength day still ahead in the week, and next week as one
-summary line per day ending in "top set 105 kg". Both were wrong for the same
-reason. On a Sunday whose plan says rest there is no today-card and no strength
-day left, so this week rendered *nothing* while two logged sessions sat in the
-payload; and a summary line answers "how heavy" when the question is "what am I
-doing". `weekBody` now renders every day of the shown week that is not an empty
-rest day: days behind today show what was logged, today keeps its Start button,
-days ahead are previews without one. A rest day with a session logged on it is
-still drawn — a day that was trained is a day that happened, whatever the plan
-called it. `isPreview` is `day.date > todayYmd` and nothing else; day keys are
-`YYYY-MM-DD`, where string order is date order.
+**One day is rendered — the selected one.** REVISED 2026-09-08. This has moved
+twice, and the history is the point, because each fix broke the next thing.
+
+1. Originally: TODAY plus the next strength day still ahead, and next week as one
+   summary line per day ending in "top set 105 kg". On a Sunday whose plan says
+   rest there is no today-card and no strength day left, so the week rendered
+   *nothing* while two logged sessions sat in the payload; and a summary line
+   answers "how heavy" when the question is "what am I doing".
+2. REVISED 2026-09-06 (Chris: "this week is not showing my workouts") to render
+   every day of the shown week that was not an empty rest day. That fixed the
+   hiding, but stacked several days' cards under one screen, so tapping a day
+   appeared to do nothing — Chris, 2026-09-08: "it shows the workouts for
+   multiple days".
+3. Now: `weekBody` draws exactly the day the strip has selected. **The week is
+   still not hidden** — the strip carries all seven days with their tags and done
+   marks, so any day is one tap away, which is the web page's arrangement and
+   what the 2026-09-06 complaint was actually asking for.
+
+A rest day is now reachable: the old `shown` filter dropped rest days entirely,
+so a day the plan called rest could not be inspected or given a workout from the
+phone. Selecting one draws the rest-day note with the picker under it.
+
+Days behind today show what was logged, today keeps its Start button, days ahead
+are previews without one. `isPreview` is `day.date > todayYmd` and nothing else;
+day keys are `YYYY-MM-DD`, where string order is date order.
+
+The selection is never trusted straight from state: the strip toggles between two
+weeks, so a stored date only counts when the shown week contains it, falling back
+to today when today is in view and the week's first day otherwise. The week toggle
+carries the same weekday across the jump, or snaps to today coming back to this
+week — the web strip's rule, so both clients move the selection identically.
 
 **A calendar week does not cost a program week.** `TrainingCycle.week` says
 where the wave sits, not which calendar week that is, and only the owner's
@@ -601,7 +626,7 @@ do anything must not be on screen.
 |---|---|
 | `HCC_DEBUG_531_CHECK=1` | Prints the ported 5/3/1 math for the drift check above. Reads nothing, writes nothing. |
 | `HCC_DEBUG_TRAINING_WEEK=next` | Opens on the next-week preview instead of today. |
-| `HCC_DEBUG_TRAINING_PICKER=YYYY-MM-DD` | Opens that day's workout picker on appear. |
+| `HCC_DEBUG_TRAINING_PICKER=YYYY-MM-DD` | Selects that day on appear, so its card and picker are what renders. (Named `PICKER` from when a tap only opened a picker; kept so existing recipes still work.) |
 | `HCC_DEBUG_TRAINING_ANCHOR=week\|progression\|controls` | Scrolls to that block on appear — the tab is several screens tall and `simctl` cannot scroll. Same trick as `HCC_DEBUG_HOME_ANCHOR`. |
 | `HCC_DEBUG_TRAINING_SAVE=<action>` | Runs ONE write through the same store method the button runs, so a write path can be proved from a launch with no UI automation — the Alarm/Customize `HCC_DEBUG_SAVE` pattern. **It MUTATES SERVER STATE**: never set it against an instance whose data you are not willing to change. Actions: `start`, `logset`, `amrap:<n>`, `note:<text>`, `plan:<ymd>:<catalog key>`, `cycle:<action>[:<week>]`. |
 
