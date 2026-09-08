@@ -280,23 +280,12 @@ struct HCCHomeView: View {
       progress: (value ?? 0) / 100,
       value: value.map { HealthDataStore.hccDecimalText($0, fractionDigits: 0) },
       unit: "%",
-      sub: recoverySub,
       // The band comes from the server's own cutoffs when `/instance` has been
       // read. A calibrating or absent score has no band, and the ring draws its
       // muted pair rather than a colour that would read as a verdict.
       band: value.map { HCCRecoveryBand.band(for: $0, bands: store.hcc.instance?.scoreBands.recovery) },
       route: .recovery(day: dayKey)
     )
-  }
-
-  /// "74 · 50" — the two streams recovery is computed from. Either can be
-  /// missing on its own, and a missing one is a `--`, never the other one's
-  /// value or a carried-over reading.
-  private var recoverySub: String? {
-    guard let home, home.hrv != nil || home.rhr != nil else { return nil }
-    let hrv = home.hrv.map { HealthDataStore.hccDecimalText($0, fractionDigits: 0) } ?? "--"
-    let rhr = home.rhr.map { HealthDataStore.hccDecimalText($0, fractionDigits: 0) } ?? "--"
-    return "\(hrv) · \(rhr)"
   }
 
   private var strainRing: RingModel {

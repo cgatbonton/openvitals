@@ -140,7 +140,7 @@ struct HCCComponentGallery: View {
           title: "Recovery",
           ring: HCCRing(
             progress: 0.70, kind: .rec, size: 94, stroke: 7,
-            value: "70", unit: "%", sub: "84 · 51", band: .band(for: 70)
+            value: "70", unit: "%", band: .band(for: 70)
           )
         )
         HCCRingWrap(
@@ -179,7 +179,7 @@ struct HCCComponentGallery: View {
       HStack(spacing: 8) {
         // Calibrating: no value, no band, no glow — the muted pair.
         VStack(spacing: 6) {
-          HCCRing(progress: 0, kind: .rec, size: 94, stroke: 7, value: nil, unit: "%", sub: "--")
+          HCCRing(progress: 0, kind: .rec, size: 94, stroke: 7, value: nil, unit: "%")
           HCCLabel("Calibrating")
           HCCPill("No band", tone: .muted)
         }
