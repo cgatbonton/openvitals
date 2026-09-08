@@ -71,6 +71,11 @@ struct HCCJournalEntry: Decodable, Equatable {
 struct HCCDueDose: Decodable, Equatable, Identifiable {
   let protocolId: String
   let protocolTitle: String
+  /// What the row is called, decided SERVER-side: the product, or for a
+  /// product-less regimen the headword of its title ("Fexofenadine (Allegra)",
+  /// not the whole "… — daily H1 antihistamine, eczema itch"). Optional only
+  /// because an older instance does not send it; see `doseTitle`.
+  let label: String?
   let productId: String?
   let productName: String?
   let unit: String?

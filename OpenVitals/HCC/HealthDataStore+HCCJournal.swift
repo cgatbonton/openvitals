@@ -315,6 +315,7 @@ private extension HCCDueDose {
     HCCDueDose(
       protocolId: protocolId,
       protocolTitle: protocolTitle,
+      label: label,
       productId: productId,
       productName: productName,
       unit: unit,

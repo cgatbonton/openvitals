@@ -310,11 +310,14 @@ private struct HCCJournalScreen: View {
   /// Supplement Stack") is repeated down every row of a stack and says nothing
   /// the card's own header does not, so the product name is the whole label.
   ///
-  /// It falls BACK to the protocol title, because `productName` is null for a
-  /// protocol with no linked product — a free-text regimen like a peptide
-  /// course — and those rows have no other name. Dropping the title outright
-  /// would leave them blank, which is the one thing worse than a repeated word.
+  /// The server now sends that decision as `label` (2026-09-08), which also
+  /// shortens a product-less regimen to the headword of its title — so this
+  /// app and the web page can never name the same line differently. The local
+  /// fallback below is only for an older instance that sends no label: the
+  /// product name, then the protocol title, because a product-less row has no
+  /// other name and a blank is the one thing worse than a long one.
   static func doseTitle(_ due: HCCDueDose) -> String {
+    if let label = due.label, !label.isEmpty { return label }
     if let name = due.productName, !name.isEmpty { return name }
     return due.protocolTitle
   }
