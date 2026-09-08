@@ -194,7 +194,12 @@ struct HCCTrainingView: View {
       selected: selected
     )
 
-    ForEach(Array(Self.liftOrder.enumerated()), id: \.element) { offset, lift in
+    // Progression belongs to the day being shown, not to the tab: on a squat +
+    // bench day these are squat and bench, and on a conditioning or rest day
+    // there is no lift to chart, so the block is not there at all.
+    let progressionLifts = selected.map { Self.progressionLifts(day: $0, data: data) } ?? []
+
+    ForEach(Array(progressionLifts.enumerated()), id: \.element) { offset, lift in
       HCCTrainingProgressionCard(
         lift: lift,
         trainingMaxKg: cycle.tm(lift) ?? 0,
@@ -207,9 +212,27 @@ struct HCCTrainingView: View {
       .id(HCCTrainingAnchor.controls.rawValue)
   }
 
-  /// Squat, bench, deadlift, press — the heavy compounds first, matching the web
-  /// page's progression order.
-  private static let liftOrder: [HCCLiftKey] = [.squat, .bench, .deadlift, .press]
+  /// The lifts whose progression belongs under the selected day: none unless it
+  /// is a lifting day, and then exactly the lifts it runs, in the order it runs
+  /// them — so a "Squat + Bench" day charts squat then bench, and nothing else.
+  ///
+  /// Logged work wins over the plan, the same rule the day's own cards use: when
+  /// a strength session exists its sets name the lifts, so a day trained off-plan
+  /// charts what was actually lifted rather than what was scheduled. `groupByLift`
+  /// is reused for that because it already returns distinct lifts in the day's
+  /// order.
+  ///
+  /// It replaced a fixed `[.squat, .bench, .deadlift, .press]` block that drew all
+  /// four on every day, including conditioning and rest days (Chris, 2026-09-08).
+  private static func progressionLifts(day: HCCResolvedDay, data: HCCTrainingData) -> [HCCLiftKey] {
+    if let session = data.sessions(on: day.date).first(where: { $0.kind == .strength }) {
+      let logged = groupByLift(session.sets, order: day.lifts).map(\.lift)
+      if !logged.isEmpty { return logged }
+    }
+    // No session yet: the plan decides, and only a lifting day has lifts. Matches
+    // `showsStrength` in dayCards, so the chart block and the day's card agree.
+    return day.option == .strength ? day.lifts : []
+  }
 
   private var helperText: String {
     if state.weekOffset == 0 { return "Tap a day to show it." }

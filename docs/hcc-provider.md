@@ -602,6 +602,26 @@ to today when today is in view and the week's first day otherwise. The week togg
 carries the same weekday across the jump, or snaps to today coming back to this
 week — the web strip's rule, so both clients move the selection identically.
 
+**Progression charts belong to the selected day, not to the tab.** REVISED
+2026-09-08 (Chris: "it should show the progression cards only for squat and
+bench"). The tab drew a fixed four-card block — squat, bench, deadlift, press —
+under every day, including conditioning and rest days, where there is no lift to
+chart at all. `progressionLifts(day:data:)` now decides: a strength session's own
+sets name the lifts when one exists, otherwise the plan's `day.lifts`, and a
+non-strength day returns none so the whole block is absent. `groupByLift` is
+reused to derive them because it already returns distinct lifts in the day's run
+order, so a "Squat + Bench" day charts squat then bench — the order the workout is
+run, not alphabetical and not a fixed house order.
+
+Logged work wins over the plan here exactly as it does in `dayCards`, and the
+fallback matches `showsStrength`, so the day's card and its charts can never
+disagree about whether the day is a lifting day.
+
+One consequence for screenshots: **the `progression` scroll anchor only exists on
+a lifting day.** `HCC_DEBUG_TRAINING_ANCHOR=progression` therefore has nothing to
+scroll to unless the selected day lifts — pair it with
+`HCC_DEBUG_TRAINING_PICKER=<a strength day>`.
+
 **A calendar week does not cost a program week.** `TrainingCycle.week` says
 where the wave sits, not which calendar week that is, and only the owner's
 button moves it. Projecting `+1` program week per calendar week — which both
