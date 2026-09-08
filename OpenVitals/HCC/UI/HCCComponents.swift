@@ -445,10 +445,14 @@ struct HCCButtonSpec {
   /// A disabled button still says why when tapped elsewhere; here it just
   /// renders dimmed and takes no tap.
   var isEnabled: Bool = true
+  /// A secondary button whose action removes something: same shape, `bad`
+  /// text, so the row reads the same and the one that destroys stands out.
+  var isDestructive: Bool = false
 
-  init(title: String, isEnabled: Bool = true, action: @escaping () -> Void) {
+  init(title: String, isEnabled: Bool = true, isDestructive: Bool = false, action: @escaping () -> Void) {
     self.title = title
     self.isEnabled = isEnabled
+    self.isDestructive = isDestructive
     self.action = action
   }
 }
@@ -477,7 +481,9 @@ struct HCCButtonRow: View {
         .font(HCCTheme.Font.body(size: 11, weight: .semibold))
         .tracking(0.88)
         .textCase(.uppercase)
-        .foregroundStyle(isPrimary ? HCCTheme.Color.bg : HCCTheme.Color.text)
+        .foregroundStyle(
+          isPrimary ? HCCTheme.Color.bg : spec.isDestructive ? HCCTheme.Color.bad : HCCTheme.Color.text
+        )
         .frame(maxWidth: .infinity)
         .padding(.vertical, 11)
         .padding(.horizontal, 8)

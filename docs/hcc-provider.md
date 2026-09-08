@@ -265,6 +265,16 @@ rolls the local edit back and puts the server's own message on
 `store.hcc.lastError`, so a write that did not happen never looks like one that
 did.
 
+A device's activity row is editable and deletable too, not only a hand-logged
+one — the approved mockup offers "Edit" on a device's row. What the server does
+with the write is the part to know: an edit to the type or window is kept across
+the next sync (`Activity.editedAt`) and never re-scores the strain, which stays
+what the device measured; a delete tombstones the row (`Activity.deletedAt`)
+rather than removing it, so the sync cannot bring it back. Both are applied to
+the other device's copy of the same event as well, so a co-wear delete does not
+merely swap which band's copy is on the list. `effort` is the one field that is
+manual-only, and the sheet hides it on a device's row.
+
 One encoding trap is worth knowing: `PUT /devices/preferred` takes
 `{"source": null}` to CLEAR the override, and its schema requires the key. Swift's
 synthesized `Encodable` omits a nil optional, which the server answers with a

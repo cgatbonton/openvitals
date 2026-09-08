@@ -1418,8 +1418,9 @@ extension HealthDataStore {
     }
   }
 
-  /// Edit a manual activity. An omitted field is left alone (see
-  /// `HCCActivityPatch`).
+  /// Edit an activity. An omitted field is left alone (see `HCCActivityPatch`).
+  /// On a device's row the server keeps the new type and window across its
+  /// next sync and never re-scores the strain; on a hand-logged row it may.
   func updateActivity(id: String, _ patch: HCCActivityPatch) async -> HCCActivityDetail? {
     guard !patch.isEmpty else { return nil }
     hccWillChange()
@@ -1435,8 +1436,9 @@ extension HealthDataStore {
     }
   }
 
-  /// Delete a manual activity. The server refuses (409) for a provider row,
-  /// because the next sync would re-create it — that message is surfaced as-is.
+  /// Delete an activity. A hand-logged row is removed outright; a device's row
+  /// is tombstoned on the server so the next sync does not bring it back, and
+  /// the other device's copy of the same event goes with it.
   @discardableResult
   func deleteActivity(id: String) async -> Bool {
     let day = hcc.lastRequestedDay ?? Self.hccDayKey(Date())

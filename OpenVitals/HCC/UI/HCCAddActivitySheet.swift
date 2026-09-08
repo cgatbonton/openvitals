@@ -1,13 +1,18 @@
 import SwiftUI
 
-// `S.addActivity` from the approved mockup, in both of its modes: logging a new
-// activity by hand, and editing one that was logged that way.
+// `S.addActivity` from the approved mockup, in all of its modes: logging a new
+// activity by hand, editing one that was logged that way, and editing or
+// deleting a row a device recorded (the mockup's activity screen offers "Edit"
+// on a device's row, and `S.activity` is what this sheet is opened from).
 //
 // Nothing here computes a strain. The sheet sends type, window, effort and
 // notes; the server estimates the strain and hands the stored row back, and the
 // activity screen shows what came back. A client-side preview of the number
 // would be a second implementation of the estimate, free to disagree with the
-// one that is actually stored.
+// one that is actually stored. A device's row is different only in what the
+// server does with the write: it keeps the new type and window across the next
+// sync and leaves the measured strain alone — so the sheet neither offers an
+// effort for it nor promises a re-score.
 
 struct HCCAddActivitySheet: View {
   @ObservedObject var store: HealthDataStore
@@ -17,6 +22,9 @@ struct HCCAddActivitySheet: View {
   /// Handed the server's stored row after a successful edit, so the screen
   /// underneath can show it without refetching.
   var onSaved: ((HCCActivityDetail) -> Void)?
+  /// Called once the server has confirmed the delete, before the sheet
+  /// dismisses — the screen underneath has nothing left to show.
+  var onDeleted: (() -> Void)?
 
   @Environment(\.dismiss) private var dismiss
 
@@ -26,16 +34,26 @@ struct HCCAddActivitySheet: View {
   @State private var effort: Int = HCCPerceivedEffort.moderate.value
   @State private var notes = ""
   @State private var isSaving = false
+  @State private var isDeleting = false
+  @State private var confirmingDelete = false
   @State private var errorText: String?
   @State private var didPrefill = false
 
   private var isEditing: Bool { editing != nil }
+  /// A row a device recorded, as opposed to one logged by hand.
+  private var isProviderRow: Bool {
+    guard let editing else { return false }
+    return editing.source.uppercased() != "MANUAL"
+  }
+  private var isBusy: Bool { isSaving || isDeleting }
 
   var body: some View {
     HCCScreen {
       HCCDetailHeader(
         title: isEditing ? "Edit activity" : "Add activity",
-        subtitle: isEditing ? "Manual entry" : "Manual entry, saved to today"
+        subtitle: isEditing
+          ? (isProviderRow ? "Recorded by \(HCCCopy.sourceLabel(editing?.source))" : "Manual entry")
+          : "Manual entry, saved to today"
       )
 
       fields
@@ -49,18 +67,36 @@ struct HCCAddActivitySheet: View {
       HCCButtonRow(
         primary: HCCButtonSpec(
           title: isEditing ? "Save changes" : "Save activity",
-          isEnabled: !isSaving && end > start,
+          isEnabled: !isBusy && end > start,
           action: save
         ),
-        secondary: HCCButtonSpec(title: "Cancel", isEnabled: !isSaving) { dismiss() }
+        secondary: HCCButtonSpec(title: "Cancel", isEnabled: !isBusy) { dismiss() }
       )
 
       if end <= start {
         HCCFootnote("The end time has to be after the start time.")
           .padding(.top, 8)
       }
+
+      if isEditing {
+        HCCButtonRow(
+          secondary: HCCButtonSpec(title: "Delete activity", isEnabled: !isBusy, isDestructive: true) {
+            confirmingDelete = true
+          }
+        )
+      }
     }
     .onAppear(perform: prefillIfNeeded)
+    .confirmationDialog("Delete this activity?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+      Button("Delete activity", role: .destructive, action: deleteActivity)
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text(
+        isProviderRow
+          ? "It comes off every device's record of this time, and the next sync will not bring it back."
+          : "This cannot be undone."
+      )
+    }
   }
 
   // ── Fields ─────────────────────────────────────────────────────────────────
@@ -92,16 +128,20 @@ struct HCCAddActivitySheet: View {
           .tint(HCCTheme.Color.accent)
       }
 
-      HCCFieldRow(title: "Perceived effort") {
-        Menu {
-          Picker("Perceived effort", selection: $effort) {
-            ForEach(HCCPerceivedEffort.allCases) { level in
-              Text("\(level.title) · \(level.value)/10").tag(level.value)
+      // Effort is the input to the hand-logged estimate. A device's row has a
+      // measured strain that no effort would change, so the row is not offered.
+      if !isProviderRow {
+        HCCFieldRow(title: "Perceived effort") {
+          Menu {
+            Picker("Perceived effort", selection: $effort) {
+              ForEach(HCCPerceivedEffort.allCases) { level in
+                Text("\(level.title) · \(level.value)/10").tag(level.value)
+              }
             }
+            .labelsHidden()
+          } label: {
+            HCCFieldValue("\(HCCPerceivedEffort.title(for: effort)) ›")
           }
-          .labelsHidden()
-        } label: {
-          HCCFieldValue("\(HCCPerceivedEffort.title(for: effort)) ›")
         }
       }
 
@@ -121,9 +161,14 @@ struct HCCAddActivitySheet: View {
       HCCLabel("Strain")
       // The mockup's sentence offers a heart-rate computation. This server has
       // no intraday heart-rate store, so a hand-logged activity is ALWAYS an
-      // estimate — see `estimateStrain` in src/lib/activities/zones.ts. Saying
-      // otherwise would promise a measurement that never happens.
-      Text("Estimated on the server from type, effort and duration, and marked as an estimate. A hand-logged activity is never computed from a heart-rate trace.")
+      // estimate — see `estimateStrain` in src/lib/activities/zones.ts — and a
+      // device's row is never re-scored by an edit. Saying otherwise, either
+      // way, would promise a computation that never happens.
+      Text(
+        isProviderRow
+          ? "Strain, heart rate and zones stay as the device measured them. Changing the type or the window relabels the activity; it does not re-score it."
+          : "Estimated on the server from type, effort and duration, and marked as an estimate. A hand-logged activity is never computed from a heart-rate trace."
+      )
         .font(HCCTheme.Font.body(size: 12.5))
         .foregroundStyle(HCCTheme.Color.muted)
         .fixedSize(horizontal: false, vertical: true)
@@ -143,8 +188,24 @@ struct HCCAddActivitySheet: View {
     notes = editing.notes ?? ""
   }
 
+  private func deleteActivity() {
+    guard !isBusy, let editing else { return }
+    isDeleting = true
+    errorText = nil
+    Task {
+      if await store.deleteActivity(id: editing.id) {
+        isDeleting = false
+        onDeleted?()
+        dismiss()
+        return
+      }
+      errorText = store.hcc.lastError ?? "That did not delete. Nothing was changed."
+      isDeleting = false
+    }
+  }
+
   private func save() {
-    guard !isSaving, end > start else { return }
+    guard !isBusy, end > start else { return }
     isSaving = true
     errorText = nil
 
@@ -155,7 +216,9 @@ struct HCCAddActivitySheet: View {
           type: type,
           startAt: HCCTime.isoInstant(start),
           endAt: HCCTime.isoInstant(end),
-          effort: effort,
+          // No effort for a device's row: it was never offered, and sending the
+          // default would write a number nobody chose.
+          effort: isProviderRow ? nil : effort,
           notes: trimmed
         )
         if let saved = await store.updateActivity(id: editing.id, patch) {

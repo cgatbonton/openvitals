@@ -89,6 +89,11 @@ struct HCCActivityDetailView: View {
   @StateObject private var load = HCCPageLoad<HCCActivityDetail>()
   @State private var edited: HCCActivityDetail?
   @State private var showEdit = false
+  /// Set by the edit sheet when the row is gone; the screen leaves once the
+  /// sheet has.
+  @State private var deleted = false
+
+  @Environment(\.dismiss) private var dismiss
 
   init(store: HealthDataStore, activityId: String) {
     self.store = store
@@ -122,10 +127,18 @@ struct HCCActivityDetailView: View {
     }
     .sheet(isPresented: $showEdit) {
       if let detail {
-        HCCAddActivitySheet(store: store, editing: detail) { updated in
-          edited = updated
-        }
+        HCCAddActivitySheet(
+          store: store,
+          editing: detail,
+          onSaved: { updated in edited = updated },
+          onDeleted: { deleted = true }
+        )
       }
+    }
+    // Leave only once the sheet is down: popping a screen while its sheet is
+    // still up tears both down at once and drops the dismissal animation.
+    .onChange(of: showEdit) { _, isShown in
+      if !isShown && deleted { dismiss() }
     }
   }
 
@@ -135,9 +148,11 @@ struct HCCActivityDetailView: View {
     HCCDetailHeader(
       title: detail.map { HCCActivityCopy.title(for: $0.type) } ?? "Activity",
       subtitle: detail.map(subtitle(for:)),
-      // Only a hand-logged row can be edited; a provider's row is re-created by
-      // the next sync, so offering "Edit" on one would be offering a no-op.
-      actionTitle: detail?.source.uppercased() == "MANUAL" ? "Edit" : nil,
+      // Every stored row can be edited or deleted: the server keeps an owner's
+      // edit across the next sync and tombstones a deleted device row, so this
+      // is no longer a manual-only affordance. A derived sleep row never gets
+      // here — nights route to HCCSleepView.
+      actionTitle: detail != nil ? "Edit" : nil,
       action: { showEdit = true }
     )
   }
