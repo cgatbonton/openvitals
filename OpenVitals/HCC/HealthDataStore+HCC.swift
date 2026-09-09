@@ -1410,6 +1410,7 @@ extension HealthDataStore {
     do {
       let created = try await HCCSession.shared.client.createActivity(draft)
       await reloadActivities(around: created.activity.startAt)
+      await reloadNightIfSleep(kind: created.activity.kind, endAt: created.activity.endAt)
       return created.activity
     } catch {
       hccWillChange()
@@ -1428,6 +1429,7 @@ extension HealthDataStore {
     do {
       let updated = try await HCCSession.shared.client.updateActivity(id: id, patch)
       await reloadActivities(around: updated.activity.startAt)
+      await reloadNightIfSleep(kind: updated.activity.kind, endAt: updated.activity.endAt)
       return updated.activity
     } catch {
       hccWillChange()
@@ -1443,6 +1445,7 @@ extension HealthDataStore {
   func deleteActivity(id: String) async -> Bool {
     let day = hcc.lastRequestedDay ?? Self.hccDayKey(Date())
     let previous = hcc.activitiesByDate[day]
+    let removed = previous?.first { $0.id == id }
     hccWillChange()
     hcc.activitiesByDate[day] = previous?.filter { $0.id != id }
     hcc.lastError = nil
@@ -1450,6 +1453,7 @@ extension HealthDataStore {
     do {
       _ = try await HCCSession.shared.client.deleteActivity(id: id)
       await reloadActivities(day: day)
+      if let removed { await reloadNightIfSleep(kind: removed.kind, endAt: removed.endAt) }
       return true
     } catch {
       hccWillChange()
@@ -1470,6 +1474,15 @@ extension HealthDataStore {
     }
     hccWillChange()
     hcc.activitiesByDate[response.date] = response.activities
+  }
+
+  /// A sleep write moves the night's numbers — total, need, debt, the sleep
+  /// score, and tonight's plan — so the day's home, sleep and plan reads are
+  /// re-queued behind the server's recompute. A workout write changes none of
+  /// those and skips this.
+  private func reloadNightIfSleep(kind: String, endAt: String) async {
+    guard kind.uppercased() == "SLEEP" else { return }
+    await refreshFromHCC(date: HCCTime.instant(endAt), force: true)
   }
 
   /// The same, for the civil day an ISO instant falls on. The day key comes

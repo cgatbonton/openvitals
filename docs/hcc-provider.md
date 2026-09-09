@@ -275,6 +275,25 @@ the other device's copy of the same event as well, so a co-wear delete does not
 merely swap which band's copy is on the list. `effort` is the one field that is
 manual-only, and the sheet hides it on a device's row.
 
+**Sleep is written the same way, with one more field (2026-09-09).** A SLEEP
+row — the night, or a nap (`type: "nap"`) — is created with `kind: "SLEEP"` and
+carries `asleepMin`, the minutes actually asleep inside the window, which is the
+figure the server's sleep model reads; the window is only what the list shows.
+The sheet offers Workout / Sleep / Nap when adding and keeps the kind fixed when
+editing. What the server does with a sleep write is different from a workout's
+and the sheet says so: an owner's night REPLACES the device's for that night's
+score, sleep debt and tonight's need, and every debt-dependent night after it is
+re-graded on save; a nap lowers tonight's need and pays debt (tomorrow's
+recovery, never today's) and never stands in for a night; deleting a night means
+"no sleep on record", not "show the device's night again". The derived row a
+night with only measurements produces (`synthetic-sleep-<day>`) is editable and
+deletable too — the server turns it into a stored row on the first write, so the
+id the sheet sent is not the id that comes back. `HCCSleepView` offers Edit only
+once the day's activity list has loaded, and Add only when that list has no
+night: offering Add before the list is known could log a second night on top of
+one the server already has. After any SLEEP write the store re-queues the day's
+home, sleep and plan reads (`reloadNightIfSleep`), because all three moved.
+
 One encoding trap is worth knowing: `PUT /devices/preferred` takes
 `{"source": null}` to CLEAR the override, and its schema requires the key. Swift's
 synthesized `Encodable` omits a nil optional, which the server answers with a

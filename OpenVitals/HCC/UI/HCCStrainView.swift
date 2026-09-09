@@ -153,9 +153,11 @@ struct HCCStrainView: View {
 
   // ── Activities ─────────────────────────────────────────────────────────────
 
-  /// Workouts only — the derived sleep row belongs on the sleep screen.
+  /// Workouts and naps — the night itself belongs on the sleep screen, and a
+  /// nap is the one sleep that is an activity of the day rather than the night
+  /// before it.
   private var workouts: [HCCActivity]? {
-    store.hccActivities(for: day)?.filter { $0.kind.uppercased() != "SLEEP" }
+    store.hccActivities(for: day)?.filter { !HCCActivityRoute.isNight($0) }
   }
 
   private var activities: some View {
@@ -284,13 +286,19 @@ private struct ActivityRow: View {
 
   var body: some View {
     let times = HCCFormat.clockRange(start: activity.startAt, end: activity.endAt)
+    // A nap's badge is how long was slept; a workout's is its strain.
+    let isSleep = activity.kind.uppercased() == "SLEEP"
 
     Button(action: action) {
       HStack(spacing: 10) {
         HStack(spacing: 5) {
-          Image(systemName: "flame")
+          Image(systemName: isSleep ? "moon.zzz" : "flame")
             .font(.system(size: 12, weight: .medium))
-          Text(activity.strain.map { HCCFormat.decimal($0, 1) } ?? HCCFormat.placeholder)
+          Text(
+            isSleep
+              ? HCCWallClock.duration(minutes: activity.asleepMin ?? activity.durationMin)
+              : (activity.strain.map { HCCFormat.decimal($0, 1) } ?? HCCFormat.placeholder)
+          )
             .font(HCCTheme.Font.data(size: 15, weight: .medium))
             .monospacedDigit()
         }
@@ -298,7 +306,7 @@ private struct ActivityRow: View {
         .frame(width: 74, height: 44)
         .background(
           RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(HCCTheme.Color.strain.opacity(0.55))
+            .fill((isSleep ? HCCTheme.Color.sleep : HCCTheme.Color.strain).opacity(0.55))
         )
 
         VStack(alignment: .leading, spacing: 3) {

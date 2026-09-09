@@ -14,17 +14,28 @@ import SwiftUI
 
 /// Where an activity row goes.
 ///
-/// A sleep row is not a workout detail: the night has its own screen,
-/// `HCCSleepView`. Naming that here — rather than letting each caller re-derive
-/// it from `kind` — keeps one rule for "which screen does this row open", and
-/// gives Home, Strain and this screen a single seam to route through.
+/// The night is not a workout detail: it has its own screen, `HCCSleepView`,
+/// which is also where it is edited. A NAP is a SLEEP row too, but it is an
+/// activity of the day, not the night before it, so it opens the detail below
+/// (sleep-shaped: no strain, no zones). Naming that here — rather than letting
+/// each caller re-derive it from `kind` and `type` — keeps one rule for "which
+/// screen does this row open", and gives Home, Strain and this screen a single
+/// seam to route through.
 enum HCCActivityRoute: Hashable {
   case workout(id: String)
   /// The server's civil day the night belongs to, for `HCCSleepView`.
   case sleep(date: String)
 
+  /// The server's `type` for a nap — the one SLEEP row that is not the night.
+  static let napType = "nap"
+
+  /// Whether a row is the night itself (as opposed to a workout or a nap).
+  static func isNight(_ activity: HCCActivity) -> Bool {
+    activity.kind.uppercased() == "SLEEP" && activity.type.lowercased() != napType
+  }
+
   static func route(for activity: HCCActivity, day: String) -> HCCActivityRoute {
-    activity.kind.uppercased() == "SLEEP" ? .sleep(date: day) : .workout(id: activity.id)
+    isNight(activity) ? .sleep(date: day) : .workout(id: activity.id)
   }
 
   /// The route for an id alone, resolved against the days the store has read.
@@ -74,7 +85,8 @@ struct HCCActivityDestinationView: View {
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
-/// One workout's detail.
+/// One workout's detail — or one nap's, which shares the screen and the edit
+/// sheet but shows a sleep-shaped set of facts instead of a strain ring.
 ///
 /// The store caches the day's LIST (`HCCActivity`), which carries no zone
 /// minutes, no effort and no notes — this screen needs all three. There is no
@@ -104,15 +116,22 @@ struct HCCActivityDetailView: View {
   /// one, otherwise what the page loaded.
   private var detail: HCCActivityDetail? { edited ?? load.value }
 
+  /// A nap: the one SLEEP row that lands on this screen.
+  private var isNap: Bool { detail?.kind.uppercased() == "SLEEP" }
+
   var body: some View {
     HCCScreen {
       header
       if let detail {
-        hero(detail)
-        HCCStat3(items: stats(detail))
-        heartRateCard
-        zonesCard(detail)
-        factsCard(detail)
+        if isNap {
+          napCard(detail)
+        } else {
+          hero(detail)
+          HCCStat3(items: stats(detail))
+          heartRateCard
+          zonesCard(detail)
+          factsCard(detail)
+        }
         notesCard(detail)
       } else if let errorText = load.errorText {
         HCCErrorNote(errorText)
@@ -150,8 +169,8 @@ struct HCCActivityDetailView: View {
       subtitle: detail.map(subtitle(for:)),
       // Every stored row can be edited or deleted: the server keeps an owner's
       // edit across the next sync and tombstones a deleted device row, so this
-      // is no longer a manual-only affordance. A derived sleep row never gets
-      // here — nights route to HCCSleepView.
+      // is no longer a manual-only affordance. The night itself never gets
+      // here — it routes to HCCSleepView, which offers the same sheet.
       actionTitle: detail != nil ? "Edit" : nil,
       action: { showEdit = true }
     )
@@ -220,6 +239,25 @@ struct HCCActivityDetailView: View {
     .hccCard()
   }
 
+  /// A nap's facts. No strain and no zones — a sleep carries none in any
+  /// provider's model, and none is invented here — but what it does to the
+  /// sleep model is worth a sentence, because it is not what a workout does.
+  private func napCard(_ detail: HCCActivityDetail) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HCCKeyValueGrid(rows: [
+        HCCKeyValue("Window", HCCWallClock.duration(minutes: detail.durationMin)),
+        HCCKeyValue("Time asleep", HCCWallClock.duration(minutes: detail.asleepMin ?? detail.durationMin), emphasized: true),
+        HCCKeyValue("Source", HCCCopy.sourceLabel(detail.source)),
+        HCCKeyValue("Counts toward", "Tonight's need"),
+      ])
+      HCCFootnote(
+        "A nap lowers tonight's sleep need and pays down sleep debt. It shows up in tomorrow's recovery, not today's.",
+        size: 12
+      )
+    }
+    .hccCard()
+  }
+
   @ViewBuilder
   private func notesCard(_ detail: HCCActivityDetail) -> some View {
     if let notes = detail.notes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -248,6 +286,8 @@ enum HCCActivityCopy {
     "jiu_jitsu": "Jiu-jitsu",
     "bjj": "Brazilian jiu-jitsu",
     "hiit": "HIIT",
+    "nap": "Nap",
+    "sleep": "Sleep",
   ]
 
   /// `assault_bike` → "Assault bike". The server's `type` is free text by

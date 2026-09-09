@@ -163,13 +163,16 @@ struct HCCStepper: View {
   let range: ClosedRange<Int>
   var step: Int = 1
   var suffix: String = ""
+  /// How the value reads, when "\(value) \(suffix)" is not it — minutes shown
+  /// as "7h 21m", say. Nil keeps the plain rendering.
+  var label: ((Int) -> String)? = nil
 
   var body: some View {
     HStack(spacing: 8) {
       button("minus", enabled: value - step >= range.lowerBound) {
         value = max(range.lowerBound, value - step)
       }
-      Text(suffix.isEmpty ? "\(value)" : "\(value) \(suffix)")
+      Text(label?(value) ?? (suffix.isEmpty ? "\(value)" : "\(value) \(suffix)"))
         .font(HCCTheme.Font.data(size: 12.5))
         .monospacedDigit()
         .foregroundStyle(HCCTheme.Color.accent)

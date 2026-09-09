@@ -296,6 +296,12 @@ struct HCCSleepNight: Decodable {
   let needH: Double?
   /// Sleep debt, in hours, carried into that day.
   let debtH: Double?
+  /// Hours a nap the afternoon before took off this night's need. 0 on a
+  /// nap-free day; nil when the night was not scored.
+  let napH: Double?
+  /// True when the owner has spoken for this night — logged it by hand, edited
+  /// the device's row, or deleted it — and `totalH` is theirs.
+  let edited: Bool?
   /// THE sleep score for this night — the same resolved per-day value `/home`
   /// and `/scores` show, not a second opinion. Null when neither instrument
   /// scored the night. One night has one score: render this, never
@@ -313,6 +319,10 @@ struct HCCSleepNight: Decodable {
   let modelPerformance: Double?
   /// A real stage timeline when the stored payload has one; never inferred.
   let segments: [HCCSleepSegment]?
+  /// The owner's average per stage over the 14 nights before this one — the
+  /// ledger's "usual" tick. Null until enough nights are on record, and
+  /// absent from a server older than the field.
+  let stageBaselines: HCCSleepStageBaselines?
   let respiratoryRate: Double?
 }
 
@@ -322,6 +332,15 @@ struct HCCSleepStages: Decodable {
   let lightH: Double?
   let awakeH: Double?
   let totalH: Double?
+}
+
+struct HCCSleepStageBaselines: Decodable {
+  let deepH: Double?
+  let remH: Double?
+  let lightH: Double?
+  let awakeH: Double?
+  /// Nights that contributed, for the footnote.
+  let nights: Int
 }
 
 struct HCCSleepSegment: Decodable {
@@ -663,6 +682,8 @@ struct HCCActivity: Decodable, Identifiable {
   let maxHr: Double?
   let kcal: Double?
   let distanceM: Double?
+  /// SLEEP rows: minutes asleep inside the window; nil when not recorded.
+  let asleepMin: Double?
   /// Present only on the derived sleep row a night produces when no session
   /// was recorded.
   let synthetic: Bool?
@@ -682,6 +703,7 @@ struct HCCActivityDetail: Decodable, Identifiable {
   let maxHr: Double?
   let kcal: Double?
   let distanceM: Double?
+  let asleepMin: Double?
   let synthetic: Bool?
   let zoneMs: [Double]
   let zoneMin: [Double]
@@ -823,7 +845,8 @@ struct HCCSleepNeedDecomposition: Decodable {
   let debtH: Double
   /// Hours added by today's strain.
   let strainH: Double
-  /// Structurally present and always 0 — no stream here reports naps.
+  /// Hours REMOVED by a nap taken today — zero or negative. Naps come from
+  /// activity rows (a hand-logged nap, or WHOOP's), not from any wrist stream.
   let napsH: Double
 }
 
@@ -909,13 +932,18 @@ struct HCCDashboardTilesBody: Encodable {
 /// `startAt`/`endAt` are ISO instants WITH an offset (the route's zod requires
 /// one) — `HCCTime.isoInstant` produces them.
 struct HCCActivityCreate: Encodable {
+  /// `WORKOUT` (the default when omitted) or `SLEEP`.
+  var kind: String?
+  /// A sport slug for a workout; `sleep` or `nap` for a SLEEP row.
   let type: String
   let startAt: String
   let endAt: String
-  /// 1–10 perceived effort.
-  let effort: Int
+  /// 1–10 perceived effort. Required for a workout, meaningless for a sleep.
+  var effort: Int?
   var notes: String?
   var trainingSessionId: String?
+  /// SLEEP only: minutes asleep inside the window.
+  var asleepMin: Int?
 }
 
 /// `PATCH /api/mobile/v1/activities/{id}` body — every field optional, and an
@@ -931,9 +959,11 @@ struct HCCActivityPatch: Encodable {
   var endAt: String?
   var effort: Int?
   var notes: String?
+  /// SLEEP only: minutes asleep inside the window.
+  var asleepMin: Int?
 
   var isEmpty: Bool {
-    type == nil && startAt == nil && endAt == nil && effort == nil && notes == nil
+    type == nil && startAt == nil && endAt == nil && effort == nil && notes == nil && asleepMin == nil
   }
 }
 

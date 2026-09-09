@@ -4,15 +4,28 @@ import SwiftUI
 ///
 /// The one rule that shapes this file: a hypnogram is a claim about WHEN each
 /// stage happened, and the server only sometimes knows. When `segments` is
-/// present it is drawn exactly as sent; when it is absent the same totals are
-/// shown as one stacked bar with the legend, because inventing boundaries from
-/// four durations would be drawing a night nobody recorded.
+/// present the night is drawn as a depth trace, exactly as sent; when it is
+/// absent the same totals are shown as a stage ledger — one bar per stage
+/// against the owner's own recent average — because inventing boundaries from
+/// four durations would be drawing a night nobody recorded. (Design chosen
+/// 2026-09-09 from the "Sleep Stage Variations" artifact: A for timelines, D
+/// for totals.)
 struct HCCSleepView: View {
   @ObservedObject var store: HealthDataStore
   var dayKey: String?
 
   @State private var route: HCCDetailRoute?
   @State private var isEnsuringDay = false
+
+  /// The night's own row, read when the owner taps Edit. The store caches the
+  /// day's LIST, which carries no notes; the sheet needs them, and the read
+  /// goes through the same page-load helper the activity screen uses so the
+  /// session's 401 handling applies and the fetch never sits in the body.
+  @StateObject private var nightRow = HCCPageLoad<HCCActivityDetail>()
+  @State private var editing: HCCActivityDetail?
+  @State private var showSheet = false
+  @State private var isOpeningSheet = false
+  @State private var openError: String?
 
   init(store: HealthDataStore, dayKey: String? = nil) {
     self.store = store
@@ -34,7 +47,14 @@ struct HCCSleepView: View {
 
   var body: some View {
     HCCScreen {
-      HCCDetailHeader(title: "Sleep", subtitle: subtitle)
+      // Every night is editable — a device's, a hand-logged one, and the
+      // derived row a night with only measurements produces (the server turns
+      // that into a stored row on the first edit). A day with no night at all
+      // offers to add one.
+      HCCDetailHeader(title: "Sleep", subtitle: subtitle, actionTitle: actionTitle, action: openSheet)
+      if let openError {
+        HCCErrorNote(openError)
+      }
       hero
       totals
       stages
@@ -43,6 +63,47 @@ struct HCCSleepView: View {
     }
     .task(id: day) { await ensureDayLoaded() }
     .sheet(item: $route) { HCCDetailRouteSheet(route: $0, store: store) }
+    .sheet(isPresented: $showSheet) {
+      // The store re-reads the night behind any sleep write, so nothing here
+      // has to be told what changed.
+      HCCAddActivitySheet(store: store, editing: editing, initialEntry: .sleep, nightOf: day)
+    }
+  }
+
+  // ── Edit ───────────────────────────────────────────────────────────────────
+
+  /// The night's row on the day's list — a stored session, or the derived one.
+  /// Nil while the list has not loaded, or when the day has no night.
+  private var nightRowOnList: HCCActivity? {
+    store.hccActivities(for: day)?.first(where: HCCActivityRoute.isNight)
+  }
+
+  /// No action until the list is known: offering "Add" before it loads could
+  /// log a second night on top of one the server already has.
+  private var actionTitle: String? {
+    guard store.hccActivities(for: day) != nil, !isOpeningSheet else { return nil }
+    return nightRowOnList == nil ? "Add" : "Edit"
+  }
+
+  private func openSheet() {
+    guard !isOpeningSheet else { return }
+    openError = nil
+    guard let row = nightRowOnList else {
+      editing = nil
+      showSheet = true
+      return
+    }
+    isOpeningSheet = true
+    Task {
+      await nightRow.reload { try await HCCSession.shared.client.activity(id: row.id).activity }
+      isOpeningSheet = false
+      guard let detail = nightRow.value else {
+        openError = nightRow.errorText ?? "Could not open this night."
+        return
+      }
+      editing = detail
+      showSheet = true
+    }
   }
 
   // ── Header ─────────────────────────────────────────────────────────────────
@@ -52,7 +113,10 @@ struct HCCSleepView: View {
       ? "Last night"
       : HealthDataStore.hccDayLabel(day)
     guard let total = night?.stages.totalH else { return when }
-    return "\(when) · \(HCCFormat.hours(total)) slept"
+    let slept = "\(when) · \(HCCFormat.hours(total)) slept"
+    // The owner's figure, not the device's — said, so the number is not read
+    // as a measurement it is not.
+    return night?.edited == true ? "\(slept) · edited" : slept
   }
 
   // ── Hero ───────────────────────────────────────────────────────────────────
@@ -90,10 +154,17 @@ struct HCCSleepView: View {
   // ── Slept / Needed / Debt ──────────────────────────────────────────────────
 
   private var totals: some View {
-    HStack(alignment: .top, spacing: 10) {
-      totalColumn("Slept", HCCFormat.hours(night?.stages.totalH), color: HCCTheme.Color.text)
-      totalColumn("Needed", HCCFormat.hours(night?.needH), color: HCCTheme.Color.text)
-      totalColumn("Debt", HCCFormat.hours(night?.debtH), color: HCCTheme.Color.warn)
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(alignment: .top, spacing: 10) {
+        totalColumn("Slept", HCCFormat.hours(night?.stages.totalH), color: HCCTheme.Color.text)
+        totalColumn("Needed", HCCFormat.hours(night?.needH), color: HCCTheme.Color.text)
+        totalColumn("Debt", HCCFormat.hours(night?.debtH), color: HCCTheme.Color.warn)
+      }
+      // The need already has the nap taken off; say so, or "Needed" reads as
+      // lower than the nights around it for no visible reason.
+      if let nap = night?.napH, nap > 0 {
+        HCCFootnote("Needed is \(HCCFormat.hours(nap)) lower for a nap the afternoon before.")
+      }
     }
     .hccCard()
   }
@@ -114,56 +185,83 @@ struct HCCSleepView: View {
 
   private var stages: some View {
     VStack(alignment: .leading, spacing: 6) {
-      HCCLabel("Stages", size: 11)
-      if let segments = night?.segments, !segments.isEmpty {
-        Hypnogram(spans: spans(from: segments))
+      HStack(alignment: .firstTextBaseline) {
+        HCCLabel("Stages", size: 11)
+        Spacer(minLength: 8)
+        if let runs = timelineRuns, let first = runs.first, let last = runs.last {
+          Text("\(HCCDepthTrace.clock(first.start)) → \(HCCDepthTrace.clock(last.end))")
+            .font(HCCTheme.Font.data(size: 10))
+            .foregroundStyle(HCCTheme.Color.muted)
+        }
+      }
+      if let runs = timelineRuns {
+        HCCDepthTrace(runs: runs)
+        if let totals = stageTotals, !totals.isEmpty {
+          legend(totals)
+        }
       } else if let totals = stageTotals, !totals.isEmpty {
-        Hypnogram(spans: totals.map { Hypnogram.Span(stage: $0.stage, weight: $0.hours, fullHeight: true) })
+        HCCStageLedger(rows: ledgerRows(totals))
+        if let baselines = night?.stageBaselines {
+          HCCFootnote("Tick = your \(baselines.nights)-night average for that stage.", size: 10.5)
+            .padding(.top, 2)
+        }
       } else {
         HCCEmptyNote("No stage breakdown on record for this night.")
-      }
-      if let totals = stageTotals, !totals.isEmpty {
-        legend(totals)
-      }
-      if night?.segments?.isEmpty ?? true, stageTotals?.isEmpty == false {
-        HCCFootnote("Stage totals only — your Command Center did not store a timeline for this night.")
-          .padding(.top, 2)
       }
     }
     .hccCard()
   }
 
   private struct StageTotal: Identifiable {
-    let stage: String
+    let stage: HCCSleepStage
     let hours: Double
-    var id: String { stage }
+    var id: String { stage.rawValue }
   }
 
-  /// The four totals the server sends, in the mockup's legend order, dropping
-  /// any the server left null.
+  /// The four totals the server sends, deepest first, dropping any the server
+  /// left null.
   private var stageTotals: [StageTotal]? {
     guard let stages = night?.stages else { return nil }
     return [
-      ("awake", stages.awakeH),
-      ("rem", stages.remH),
-      ("light", stages.lightH),
-      ("deep", stages.deepH),
+      (HCCSleepStage.deep, stages.deepH),
+      (.light, stages.lightH),
+      (.rem, stages.remH),
+      (.awake, stages.awakeH),
     ]
-    .compactMap { name, hours in
+    .compactMap { stage, hours in
       guard let hours, hours > 0 else { return nil }
-      return StageTotal(stage: name, hours: hours)
+      return StageTotal(stage: stage, hours: hours)
     }
   }
 
-  private func spans(from segments: [HCCSleepSegment]) -> [Hypnogram.Span] {
-    segments.compactMap { segment in
-      guard let start = HCCTime.instant(segment.start),
+  /// The server's timeline as drawable runs, or nil when there is none — the
+  /// ledger is the honest fallback, never a timeline guessed from totals.
+  private var timelineRuns: [HCCDepthTrace.Run]? {
+    guard let segments = night?.segments else { return nil }
+    let runs = segments.compactMap { segment -> HCCDepthTrace.Run? in
+      guard let stage = HCCSleepStage(segment.stage),
+            let start = HCCTime.instant(segment.start),
             let end = HCCTime.instant(segment.end),
             end > start
       else {
         return nil
       }
-      return Hypnogram.Span(stage: segment.stage, weight: end.timeIntervalSince(start), fullHeight: false)
+      return HCCDepthTrace.Run(stage: stage, start: start, end: end)
+    }
+    .sorted { $0.start < $1.start }
+    return runs.isEmpty ? nil : runs
+  }
+
+  private func ledgerRows(_ totals: [StageTotal]) -> [HCCStageLedger.Row] {
+    let baselines = night?.stageBaselines
+    return totals.map { total in
+      let usual: Double? = switch total.stage {
+      case .deep: baselines?.deepH
+      case .light: baselines?.lightH
+      case .rem: baselines?.remH
+      case .awake: baselines?.awakeH
+      }
+      return HCCStageLedger.Row(stage: total.stage, hours: total.hours, usual: usual)
     }
   }
 
@@ -171,18 +269,23 @@ struct HCCSleepView: View {
     // `.legend` wraps; a fixed row would clip "Light 4h 09m" on a narrow phone.
     LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 6) {
       ForEach(totals) { total in
-        HStack(spacing: 4) {
-          RoundedRectangle(cornerRadius: 2, style: .continuous)
-            .fill(Hypnogram.color(for: total.stage))
-            .frame(width: 8, height: 8)
-          Text("\(Hypnogram.name(for: total.stage)) \(HCCFormat.hours(total.hours))")
+        HStack(spacing: 5) {
+          Circle()
+            .fill(total.stage.color)
+            .frame(width: 7, height: 7)
+          Text(total.stage.name)
             .font(HCCTheme.Font.data(size: 10))
             .tracking(0.4)
             .foregroundStyle(HCCTheme.Color.muted)
+          Spacer(minLength: 6)
+          Text(HCCFormat.hours(total.hours))
+            .font(HCCTheme.Font.data(size: 10, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(HCCTheme.Color.text)
         }
       }
     }
-    .padding(.top, 2)
+    .padding(.top, 4)
   }
 
   // ── Tonight ────────────────────────────────────────────────────────────────
@@ -193,12 +296,7 @@ struct HCCSleepView: View {
     VStack(alignment: .leading, spacing: 8) {
       HCCLabel("Tonight", size: 11)
       if let plan, let parts = plan.decomposition {
-        HCCKeyValueGrid(rows: [
-          HCCKeyValue("Baseline need", HCCFormat.hours(parts.baseNeedH)),
-          HCCKeyValue("Recent strain", HCCFormat.signedHours(parts.strainH)),
-          HCCKeyValue("Sleep debt", HCCFormat.signedHours(parts.debtH)),
-          HCCKeyValue("Need", HCCFormat.hours(plan.needH), emphasized: true),
-        ])
+        HCCKeyValueGrid(rows: tonightRows(plan, parts))
         Text(bedtimeSentence(plan))
           .font(HCCTheme.Font.body(size: 12))
           .foregroundStyle(HCCTheme.Color.muted)
@@ -214,6 +312,22 @@ struct HCCSleepView: View {
     .contentShape(Rectangle())
     .onTapGesture { route = .alarm }
     .accessibilityAddTraits(.isButton)
+  }
+
+  /// The need and its terms. The nap row appears only on a day with a nap —
+  /// a permanent "+0h 00m" line would be a claim the model reads naps from a
+  /// stream, which it does not.
+  private func tonightRows(_ plan: HCCSleepPlan, _ parts: HCCSleepNeedDecomposition) -> [HCCKeyValue] {
+    var rows = [
+      HCCKeyValue("Baseline need", HCCFormat.hours(parts.baseNeedH)),
+      HCCKeyValue("Recent strain", HCCFormat.signedHours(parts.strainH)),
+      HCCKeyValue("Sleep debt", HCCFormat.signedHours(parts.debtH)),
+    ]
+    if parts.napsH != 0 {
+      rows.append(HCCKeyValue("Nap today", HCCFormat.signedHours(parts.napsH)))
+    }
+    rows.append(HCCKeyValue("Need", HCCFormat.hours(plan.needH), emphasized: true))
+    return rows
   }
 
   private func bedtimeSentence(_ plan: HCCSleepPlan) -> String {
@@ -283,80 +397,240 @@ struct HCCSleepView: View {
   }
 }
 
-// ── Hypnogram ────────────────────────────────────────────────────────────────
+// ── Stages: the palette both charts share ────────────────────────────────────
 
-/// `.hypno` — proportional stage bars, each rising from the baseline to the
-/// height its stage is drawn at (awake full, REM 80%, light 60%, deep 35%).
-///
-/// `fullHeight` is the totals fallback: the same colours and proportions with
-/// every block at full height, so it reads as a composition bar rather than as
-/// a timeline the server never sent.
-private struct Hypnogram: View {
-  struct Span: Identifiable {
-    let stage: String
-    /// Any positive unit — seconds for a timeline, hours for totals. Only the
-    /// ratios matter.
-    let weight: Double
-    let fullHeight: Bool
-    let id = UUID()
+/// The four stages in lane order (awake on top, deep at the bottom), with one
+/// palette: a single blue that darkens with depth, and a warm tone for awake so
+/// it can never be read as a sleep stage. Checked colourblind-safe against the
+/// card surface with the dataviz palette validator on 2026-09-09.
+enum HCCSleepStage: String, CaseIterable {
+  case awake, rem, light, deep
+
+  /// The server's stage word (`deep | rem | light | awake`); a vendor alias
+  /// that slipped through still lands on the right lane.
+  init?(_ raw: String) {
+    switch raw.lowercased() {
+    case "awake", "aw", "wake": self = .awake
+    case "rem", "re": self = .rem
+    case "light", "li", "core": self = .light
+    case "deep", "de", "sws", "slow_wave": self = .deep
+    default: return nil
+    }
   }
 
-  let spans: [Span]
-  var height: CGFloat = 44
+  var name: String {
+    switch self {
+    case .awake: "Awake"
+    case .rem: "REM"
+    case .light: "Light"
+    case .deep: "Deep"
+    }
+  }
+
+  var color: Color {
+    switch self {
+    case .awake: HCCTheme.Color.hex(0xE0935A)
+    case .rem: HCCTheme.Color.hex(0xA6C8F2)
+    case .light: HCCTheme.Color.hex(0x5B9BE3)
+    case .deep: HCCTheme.Color.hex(0x2E63B8)
+    }
+  }
+
+  /// Lane index for the depth trace, awake on top.
+  var lane: Int { Self.allCases.firstIndex(of: self) ?? 0 }
+}
+
+// ── Depth trace (a night WITH a timeline) ────────────────────────────────────
+
+/// The classic hypnogram drawn as a line rather than blocks: a thin stepped
+/// skeleton with rounded joins carries the shape of the night, and each stage
+/// run is coloured on top of it. Boundaries are exactly the server's. Hour
+/// ticks are in the INSTANCE zone, like every other clock on this screen.
+struct HCCDepthTrace: View {
+  struct Run {
+    let stage: HCCSleepStage
+    let start: Date
+    let end: Date
+  }
+
+  /// Sorted by start, non-empty.
+  let runs: [Run]
+  var height: CGFloat = 134
+
+  private static let labelWidth: CGFloat = 40
+  private static let axisHeight: CGFloat = 20
+  private static let skeleton = HCCTheme.Color.hex(0x4A5A80)
 
   var body: some View {
-    let total = spans.reduce(0) { $0 + max($1.weight, 0) }
-    GeometryReader { proxy in
-      let gaps = CGFloat(max(spans.count - 1, 0))
-      let usable = max(proxy.size.width - gaps, 1)
-      HStack(alignment: .bottom, spacing: 1) {
-        ForEach(spans) { span in
-          Rectangle()
-            .fill(Self.color(for: span.stage))
-            .frame(
-              width: total > 0 ? usable * CGFloat(max(span.weight, 0) / total) : 0,
-              height: height * (span.fullHeight ? 1 : Self.heightFraction(for: span.stage))
-            )
+    Canvas { context, size in
+      guard let first = runs.first, let last = runs.last else { return }
+      let span = max(last.end.timeIntervalSince(first.start), 60)
+      let plotX = Self.labelWidth
+      let plotW = max(size.width - plotX - 4, 1)
+      let top: CGFloat = 8
+      let laneGap = max((size.height - Self.axisHeight - top - 8) / 3, 1)
+      let x = { (date: Date) -> CGFloat in plotX + plotW * CGFloat(date.timeIntervalSince(first.start) / span) }
+      let y = { (stage: HCCSleepStage) -> CGFloat in top + laneGap * CGFloat(stage.lane) }
+
+      // Lanes and their labels.
+      for stage in HCCSleepStage.allCases {
+        let laneY = y(stage)
+        var lane = Path()
+        lane.move(to: CGPoint(x: plotX, y: laneY))
+        lane.addLine(to: CGPoint(x: plotX + plotW, y: laneY))
+        context.stroke(lane, with: .color(HCCTheme.Color.line), lineWidth: 1)
+        context.draw(
+          Text(stage.name).font(HCCTheme.Font.data(size: 9.5)).foregroundStyle(HCCTheme.Color.muted),
+          at: CGPoint(x: plotX - 8, y: laneY),
+          anchor: .trailing
+        )
+      }
+
+      // The skeleton: one stepped path through every run, so the transitions
+      // read as a trace rather than as separate blocks.
+      var skeleton = Path()
+      skeleton.move(to: CGPoint(x: x(first.start), y: y(first.stage)))
+      for run in runs {
+        skeleton.addLine(to: CGPoint(x: x(run.start), y: y(run.stage)))
+        skeleton.addLine(to: CGPoint(x: x(run.end), y: y(run.stage)))
+      }
+      context.stroke(
+        skeleton,
+        with: .color(Self.skeleton),
+        style: StrokeStyle(lineWidth: 1.25, lineCap: .round, lineJoin: .round)
+      )
+
+      // The coloured runs on top. A run too short to draw as a line still
+      // marks its stage with a dot rather than vanishing.
+      for run in runs {
+        let x0 = x(run.start), x1 = x(run.end), laneY = y(run.stage)
+        if x1 - x0 >= 2.5 {
+          var line = Path()
+          line.move(to: CGPoint(x: x0 + 1, y: laneY))
+          line.addLine(to: CGPoint(x: x1 - 1, y: laneY))
+          context.stroke(line, with: .color(run.stage.color), style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+        } else {
+          let dot = Path(ellipseIn: CGRect(x: (x0 + x1) / 2 - 1.9, y: laneY - 1.9, width: 3.8, height: 3.8))
+          context.fill(dot, with: .color(run.stage.color))
         }
       }
-      .frame(width: proxy.size.width, height: height, alignment: .bottomLeading)
+
+      // Hour ticks in the instance zone.
+      let axisY = size.height - Self.axisHeight
+      for hour in Self.hourMarks(from: first.start, to: last.end) {
+        let tickX = x(hour)
+        var tick = Path()
+        tick.move(to: CGPoint(x: tickX, y: axisY + 4))
+        tick.addLine(to: CGPoint(x: tickX, y: axisY + 8))
+        context.stroke(tick, with: .color(HCCTheme.Color.muted), lineWidth: 1)
+        context.draw(
+          Text(Self.hourLabel(hour)).font(HCCTheme.Font.data(size: 9.5)).foregroundStyle(HCCTheme.Color.muted),
+          at: CGPoint(x: tickX, y: axisY + 10),
+          anchor: .top
+        )
+      }
     }
     .frame(height: height)
-    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-    .padding(.vertical, 2)
+    .accessibilityLabel(accessibilitySummary)
   }
 
-  /// `.hypno .aw/.li/.de/.re` — the mockup's colours, with the two `color-mix`
-  /// values resolved to their sRGB result.
-  static func color(for stage: String) -> Color {
-    switch stage.lowercased() {
-    case "awake", "aw": HCCTheme.Color.warn
-    // color-mix(in srgb, --sleep 55%, --card)
-    case "light", "li": HCCTheme.Color.hex(0x3A6AA1)
-    case "deep", "de": HCCTheme.Color.sleep
-    // color-mix(in srgb, --sleep 70%, white)
-    case "rem", "re": HCCTheme.Color.hex(0x8CC3FF)
-    default: HCCTheme.Color.line
-    }
+  private var accessibilitySummary: String {
+    runs.map { "\($0.stage.name) \(Self.clock($0.start)) to \(Self.clock($0.end))" }.joined(separator: ", ")
   }
 
-  static func heightFraction(for stage: String) -> CGFloat {
-    switch stage.lowercased() {
-    case "awake", "aw": 1.0
-    case "rem", "re": 0.8
-    case "light", "li": 0.6
-    case "deep", "de": 0.35
-    default: 0.5
+  /// Every full hour strictly inside the night, in the instance zone.
+  static func hourMarks(from start: Date, to end: Date) -> [Date] {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = HCCInstanceZone.current
+    guard var hour = calendar.dateInterval(of: .hour, for: start)?.end else { return [] }
+    var marks: [Date] = []
+    while hour < end, marks.count < 24 {
+      marks.append(hour)
+      hour = hour.addingTimeInterval(3600)
     }
+    return marks
   }
 
-  static func name(for stage: String) -> String {
-    switch stage.lowercased() {
-    case "awake", "aw": "Awake"
-    case "rem", "re": "REM"
-    case "light", "li": "Light"
-    case "deep", "de": "Deep"
-    default: stage.capitalized
+  static func hourLabel(_ date: Date) -> String {
+    date.formatted(Date.FormatStyle(timeZone: HCCInstanceZone.current).hour(.twoDigits(amPM: .omitted)))
+  }
+
+  /// A wall-clock time in the instance zone — the zone the night happened in.
+  static func clock(_ date: Date) -> String {
+    date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: HCCInstanceZone.current))
+  }
+}
+
+// ── Stage ledger (a night with totals ONLY) ──────────────────────────────────
+
+/// One thin bar per stage, deepest first, the value at the tip, and a tick
+/// where the owner's own recent average sits — what a totals-only night can
+/// honestly say, and one thing a composition bar never could.
+struct HCCStageLedger: View {
+  struct Row: Identifiable {
+    let stage: HCCSleepStage
+    let hours: Double
+    /// The owner's recent average for this stage; nil draws no tick.
+    let usual: Double?
+    var id: String { stage.rawValue }
+  }
+
+  let rows: [Row]
+
+  private var scaleMax: Double {
+    let longest = rows.map { max($0.hours, $0.usual ?? 0) }.max() ?? 1
+    return max(longest, 0.25) * 1.02
+  }
+
+  var body: some View {
+    VStack(spacing: 10) {
+      ForEach(rows) { row in
+        HStack(spacing: 8) {
+          Text(row.stage.name)
+            .font(HCCTheme.Font.data(size: 9.5))
+            .foregroundStyle(HCCTheme.Color.muted)
+            .frame(width: 40, alignment: .trailing)
+          GeometryReader { proxy in
+            let width = proxy.size.width
+            let barWidth = width * CGFloat(row.hours / scaleMax)
+            ZStack(alignment: .leading) {
+              Rectangle()
+                .fill(HCCTheme.Color.line)
+                .frame(height: 1)
+              UnevenRoundedRectangle(
+                topLeadingRadius: 0,
+                bottomLeadingRadius: 0,
+                bottomTrailingRadius: 4,
+                topTrailingRadius: 4,
+                style: .continuous
+              )
+              .fill(row.stage.color)
+              .frame(width: max(barWidth, 2), height: 8)
+              if let usual = row.usual {
+                Rectangle()
+                  .fill(HCCTheme.Color.text.opacity(0.8))
+                  .frame(width: 1.25, height: 16)
+                  .offset(x: width * CGFloat(usual / scaleMax) - 0.6)
+              }
+            }
+            .frame(height: 16)
+          }
+          .frame(height: 16)
+          Text(HCCFormat.hours(row.hours))
+            .font(HCCTheme.Font.data(size: 10.5, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(HCCTheme.Color.text)
+            .frame(width: 54, alignment: .trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText(row))
+      }
     }
+    .padding(.vertical, 4)
+  }
+
+  private func accessibilityText(_ row: Row) -> String {
+    guard let usual = row.usual else { return "\(row.stage.name) \(HCCFormat.hours(row.hours))" }
+    return "\(row.stage.name) \(HCCFormat.hours(row.hours)), usually \(HCCFormat.hours(usual))"
   }
 }
