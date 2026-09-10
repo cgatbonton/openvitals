@@ -255,6 +255,31 @@ zone and the day the app will ask for; run the simulator under
 `SIMCTL_CHILD_TZ=Pacific/Auckland` to see them diverge and confirm the app still
 asks for the instance's day.
 
+### The Selected Day Is One Value For The Whole Shell
+
+`AppShellView.selectedDate` is the ONE day every day-scoped cloud screen is
+looking at — Home, the Journal, and the bridge's health detail routes. It is not
+one selection per tab: those screens are three views of the same day, and
+stepping either navigator moves all of them (REVISED 2026-09-10, Chris — Home
+and the Journal used to drift apart, so stepping Home back to yesterday left the
+Journal still asking about today).
+
+The Journal still SPEAKS the server's civil day key, because that is what its
+cache, reads and writes all use; it derives `dayKey` from the shared `Date`
+rather than owning one. Anything that writes the shared selection writes the
+target day's **midnight in the instance zone** (`hccLocalDate(fromDayKey:)`, or
+`hccInstanceCalendar` arithmetic from it), so the value buckets back to the same
+key for every other reader. Do not hand it an arbitrary instant.
+
+This is also why Home's day naming and stepping go through `hccDayLabel` and
+`hccInstanceCalendar`: they used `Calendar.current`, which is harmless while the
+phone and the instance share a zone, but with ONE shared `Date` the two screens
+would call the same day by two different names on a phone west of the instance.
+
+A consequence worth knowing: the Journal no longer resets to today when its tab
+is reopened. That reset was an accident of its `@State` being rebuilt, and
+persistence is the point of the shared selection.
+
 ## Writes
 
 The phone writes through `HealthDataStore`, never from a view: `dismissInsight`,
@@ -507,8 +532,9 @@ logged" — the row says which in words.
 
 ### The Day Navigator
 
-The header carries the same `HCCDayNav` Home uses: back is unlimited, forward
-stops at today. A journal that could only be filled in on the day itself would
+The header carries the same `HCCDayNav` Home uses, over the same shared day
+(see "The Selected Day Is One Value For The Whole Shell"): back is unlimited,
+forward stops at today. A journal that could only be filled in on the day itself would
 quietly lose every busy evening, and those are exactly the days the impact rows
 need. `‹`/`›` step in the **instance's** calendar, not the phone's, and the card
 title reads "Doses today" only when the day on screen actually is today.

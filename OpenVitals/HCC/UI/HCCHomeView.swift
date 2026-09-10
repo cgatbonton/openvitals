@@ -102,24 +102,37 @@ struct HCCHomeView: View {
   }
 
   /// "TODAY" / "YESTERDAY" / "TUE, SEP 1", uppercased by the pill itself.
+  ///
+  /// Named in the INSTANCE's zone, not the phone's: the selection is shared
+  /// with the Journal, which has always named its day that way, and a phone
+  /// west of the instance would otherwise have the two screens call one day by
+  /// two different names.
   private var dayLabel: String {
-    let calendar = Calendar.current
-    if calendar.isDateInToday(selectedDate) { return "Today" }
-    if calendar.isDateInYesterday(selectedDate) { return "Yesterday" }
-    return selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    if isRelativeDay { return HealthDataStore.hccDayLabel(dayKey) }
+    var style = Date.FormatStyle.dateTime.weekday(.abbreviated).month(.abbreviated).day()
+    style.timeZone = HealthDataStore.hccInstanceTimeZone
+    return selectedDate.formatted(style)
+  }
+
+  private var isRelativeDay: Bool {
+    let relative = HealthDataStore.hccDayLabel(dayKey)
+    return relative == "Today" || relative == "Yesterday"
   }
 
   /// The same label inside a sentence. "today" and "yesterday" read naturally
   /// lowercased; a date does not — "no open insights for tue, aug 25" looks
   /// like a typo where "for Tue, Aug 25" reads correctly.
   private var dayLabelInSentence: String {
-    let calendar = Calendar.current
-    let isRelative = calendar.isDateInToday(selectedDate) || calendar.isDateInYesterday(selectedDate)
-    return isRelative ? dayLabel.lowercased() : dayLabel
+    isRelativeDay ? dayLabel.lowercased() : dayLabel
   }
 
+  /// Steps in the INSTANCE's calendar, from that day's midnight in that zone,
+  /// so one tap always lands exactly one civil day away — and so the value
+  /// handed to the shared selection buckets to the day the Journal will show.
   private func step(days: Int) {
-    guard let next = Calendar.current.date(byAdding: .day, value: days, to: selectedDate) else {
+    let anchor = HealthDataStore.hccLocalDate(fromDayKey: dayKey) ?? selectedDate
+    guard let next = HealthDataStore.hccInstanceCalendar.date(byAdding: .day, value: days, to: anchor)
+    else {
       return
     }
     selectedDate = next

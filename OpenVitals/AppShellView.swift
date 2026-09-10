@@ -5,7 +5,14 @@ struct AppShellView: View {
   @EnvironmentObject private var router: AppRouter
   @StateObject private var healthStore = HealthDataStore()
   @StateObject private var moreStore = MoreDataStore()
-  @State private var homeSelectedDate = Date()
+  /// The civil day every day-scoped cloud screen is looking at.
+  ///
+  /// One value for the whole shell, not one per tab: Home, the Journal and the
+  /// health detail routes are three views of the SAME day, and a per-tab
+  /// selection meant stepping Home back to yesterday and then finding the
+  /// Journal still asking about today (REVISED 2026-09-10, Chris). Stepping it
+  /// on any of them moves all of them.
+  @State private var selectedDate = Date()
   // HCC: the Health tab's stack is bound so tapping the Health tab while inside
   // Biomarkers/Insights/Genetics/Protocols can pop back to the landing. It is
   // shell `@State` rather than router state on purpose — nothing outside a tap
@@ -156,7 +163,7 @@ struct AppShellView: View {
   private var coachPageContext: String {
     switch router.selectedTab {
     case .home:
-      "mobile:home \(HealthDataStore.hccDayKey(homeSelectedDate))"
+      "mobile:home \(HealthDataStore.hccDayKey(selectedDate))"
     case .health:
       "mobile:health"
     case .journal:
@@ -198,7 +205,7 @@ struct AppShellView: View {
         NavigationStack(path: $router.healthPath) {
           tabContent(for: tab)
             .navigationDestination(for: HealthRoute.self) { route in
-              HealthRouteDestinationView(route: route, store: healthStore, selectedDate: $homeSelectedDate)
+              HealthRouteDestinationView(route: route, store: healthStore, selectedDate: $selectedDate)
             }
         }
       }
@@ -250,7 +257,7 @@ struct AppShellView: View {
     // HCC: the Journal and Training tabs are cloud-only screens; each owns its
     // own root file so the two can evolve without touching the shell again.
     case .journal:
-      HCCJournalView(store: healthStore)
+      HCCJournalView(store: healthStore, selectedDate: $selectedDate)
     case .training:
       HCCTrainingView(store: healthStore)
     case .coach:
@@ -289,7 +296,7 @@ struct AppShellView: View {
   @ViewBuilder
   private var providerHome: some View {
     if HCCProviderSettings.isCloud {
-      HCCHomeView(store: healthStore, selectedDate: $homeSelectedDate)
+      HCCHomeView(store: healthStore, selectedDate: $selectedDate)
     } else {
       homeDashboard
     }
@@ -298,7 +305,7 @@ struct AppShellView: View {
   private var homeDashboard: some View {
     HomeDashboardView(
       healthStore: healthStore,
-      selectedDate: $homeSelectedDate,
+      selectedDate: $selectedDate,
       openHealthRoute: openHomeHealthRoute
     )
   }
@@ -342,7 +349,7 @@ struct AppShellView: View {
 
   private func refreshMetricsAfterHistoricalSync() {
     healthStore.loadBridgeCatalogsIfNeeded()
-    healthStore.refreshHealthMetrics(for: homeSelectedDate)
+    healthStore.refreshHealthMetrics(for: selectedDate)
   }
 }
 

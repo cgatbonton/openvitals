@@ -20,9 +20,12 @@ import SwiftUI
 /// only be filled in on the day itself would quietly lose every busy evening.
 struct HCCJournalView: View {
   @ObservedObject var store: HealthDataStore
+  /// The day on screen. Owned by the shell and shared with Home, so stepping
+  /// either navigator moves both.
+  @Binding var selectedDate: Date
 
   var body: some View {
-    HCCJournalScreen(store: store, state: store.hccJournal)
+    HCCJournalScreen(store: store, state: store.hccJournal, selectedDate: $selectedDate)
   }
 }
 
@@ -30,10 +33,13 @@ private struct HCCJournalScreen: View {
   @ObservedObject var store: HealthDataStore
   @ObservedObject var state: HCCJournalState
 
-  /// The day on screen, as the SERVER's civil day key. Held as a key rather
-  /// than a `Date` because that is what the cache, the reads and the writes all
-  /// speak; a `Date` here would need re-bucketing at every use.
-  @State private var dayKey = HealthDataStore.hccDayKey(Date())
+  /// The day on screen, shared with Home through the shell (REVISED
+  /// 2026-09-10, Chris — the two navigators used to drift apart).
+  ///
+  /// The screen itself still speaks the SERVER's civil day key, because that is
+  /// what the cache, the reads and the writes all speak; `dayKey` derives it
+  /// once, in the instance's zone, rather than every use re-bucketing.
+  @Binding var selectedDate: Date
   @State private var didRunDebugLaunch = false
   @State private var didRunDebugSave = false
 
@@ -65,6 +71,8 @@ private struct HCCJournalScreen: View {
   }
 
   // ── The day being shown ────────────────────────────────────────────────────
+
+  private var dayKey: String { HealthDataStore.hccDayKey(selectedDate) }
 
   private var day: HCCJournalDay? { state.day(dayKey) }
 
@@ -104,7 +112,9 @@ private struct HCCJournalScreen: View {
     // Forward stops at today: the journal records what happened, and there is
     // nothing to answer about a day that has not been lived yet.
     guard key <= todayKey else { return }
-    dayKey = key
+    // `next` is the new day's midnight IN THE INSTANCE ZONE, so it buckets back
+    // to `key` for Home and for every other reader of the shared selection.
+    selectedDate = next
   }
 
   /// The handoff's header: the title block on the left, the day pill in the
@@ -504,11 +514,11 @@ private extension HCCJournalScreen {
     guard !didRunDebugLaunch else { return }
     didRunDebugLaunch = true
     guard let requested = HCCDebugScreen.requestedDayKey,
-          HealthDataStore.hccLocalDate(fromDayKey: requested) != nil
+          let date = HealthDataStore.hccLocalDate(fromDayKey: requested)
     else {
       return
     }
-    dayKey = requested
+    selectedDate = date
     #endif
   }
 }
