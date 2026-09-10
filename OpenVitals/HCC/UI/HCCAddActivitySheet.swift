@@ -7,13 +7,18 @@ import SwiftUI
 // opened from; the sleep screen opens it for the night).
 //
 // Nothing here computes a strain or a sleep score. For a workout the sheet
-// sends type, window, effort and notes; the server estimates the strain and
-// hands the stored row back, and the activity screen shows what came back. A
-// client-side preview of the number would be a second implementation of the
-// estimate, free to disagree with the one that is actually stored. A device's
-// row is different only in what the server does with the write: it keeps the
-// new type and window across the next sync and leaves the measured strain
-// alone — so the sheet neither offers an effort for it nor promises a re-score.
+// sends type, window, effort and notes — plus, for a hand-logged row, the
+// heart-rate samples Health holds for that window (any source, fullest one
+// wins; see `HCCHealthKitUploader.heartRate(in:)`) — and the server bins the
+// zones, scores or estimates the strain, and hands the stored row back; the
+// activity screen shows what came back. A client-side preview of the number
+// would be a second implementation of the score, free to disagree with the
+// one that is actually stored. The sheet does say what it FOUND — how many
+// readings, from which app — because that is a fact about Health, not a
+// number the server owns. A device's row is different in what the server does
+// with the write: it keeps the new type and window across the next sync and
+// re-reads its own recording — so the sheet neither offers an effort for it
+// nor attaches Health's samples to it.
 //
 // A sleep is the other half. The sheet sends the window and the TIME ASLEEP,
 // and the server lays the owner's figure over the device's for that night,
@@ -82,6 +87,18 @@ struct HCCAddActivitySheet: View {
   @State private var confirmingDelete = false
   @State private var errorText: String?
   @State private var didPrefill = false
+  /// What Health holds for the current window, for a hand-logged workout.
+  @State private var heartRate: HeartRateRead = .idle
+  @State private var heartRateTask: Task<Void, Never>?
+
+  /// The Health read behind the Strain card. `found` is a fact about Health;
+  /// the strain itself is still the server's number.
+  enum HeartRateRead: Equatable {
+    case idle
+    case reading
+    case found(count: Int, source: String, avg: Int, max: Int)
+    case none
+  }
 
   private var isEditing: Bool { editing != nil }
   /// A row a device recorded, as opposed to one logged by hand.
@@ -90,6 +107,8 @@ struct HCCAddActivitySheet: View {
     return editing.source.uppercased() != "MANUAL"
   }
   private var isBusy: Bool { isSaving || isDeleting }
+  /// The one kind of row Health's samples are attached to.
+  private var attachesHeartRate: Bool { !entry.isSleep && !isProviderRow }
   private var windowMin: Int { max(0, Int((end.timeIntervalSince(start) / 60).rounded())) }
   private var windowIsValid: Bool { end > start && (!entry.isSleep || windowMin <= 24 * 60) }
 
@@ -130,14 +149,25 @@ struct HCCAddActivitySheet: View {
         )
       }
     }
-    .onAppear(perform: prefillIfNeeded)
+    .onAppear {
+      prefillIfNeeded()
+      scheduleHeartRateRead()
+    }
+    .onDisappear { heartRateTask?.cancel() }
     .onChange(of: entry) { _, next in
       if !isEditing { applyDefaults(for: next) }
+      scheduleHeartRateRead()
     }
     // The figure cannot exceed the window it sits in; a shorter window pulls
     // it down rather than leaving a claim the server will refuse.
-    .onChange(of: start) { _, _ in asleepMin = min(asleepMin, windowMin) }
-    .onChange(of: end) { _, _ in asleepMin = min(asleepMin, windowMin) }
+    .onChange(of: start) { _, _ in
+      asleepMin = min(asleepMin, windowMin)
+      scheduleHeartRateRead()
+    }
+    .onChange(of: end) { _, _ in
+      asleepMin = min(asleepMin, windowMin)
+      scheduleHeartRateRead()
+    }
     .confirmationDialog("Delete this \(entry.title.lowercased())?", isPresented: $confirmingDelete, titleVisibility: .visible) {
       Button("Delete \(entry.title.lowercased())", role: .destructive, action: deleteActivity)
       Button("Cancel", role: .cancel) {}
@@ -276,13 +306,23 @@ struct HCCAddActivitySheet: View {
   private var infoText: String {
     switch entry {
     case .workout:
-      // The mockup's sentence offers a heart-rate computation. This server has
-      // no intraday heart-rate store, so a hand-logged activity is ALWAYS an
-      // estimate — see `estimateStrain` in src/lib/activities/zones.ts — and a
-      // device's row is never re-scored by an edit.
-      return isProviderRow
-        ? "Strain, heart rate and zones stay as the device measured them. Changing the type or the window relabels the activity; it does not re-score it."
-        : "Estimated on the server from type, effort and duration, and marked as an estimate. A hand-logged activity is never computed from a heart-rate trace."
+      // The server has no intraday heart-rate store of its own, so the phone
+      // is what makes a hand-logged workout more than a type × effort estimate:
+      // it reads Health for the window and sends the samples. The server bins
+      // them against a placeholder max heart rate, so the number is still
+      // marked an estimate — a better-founded one. A device's row is re-read
+      // from the device's own recording on the server instead.
+      if isProviderRow {
+        return "Strain, heart rate and zones are re-read from the device's own recording for the new window. Changing the type relabels the activity; changing the window narrows or widens what is counted, and nothing outside what the device recorded is added."
+      }
+      switch heartRate {
+      case .idle, .reading:
+        return "Checking Health for heart rate in this window…"
+      case let .found(count, source, avg, max):
+        return "\(count) heart-rate readings from \(source) cover this window (average \(avg), peak \(max) bpm). Strain is computed from them on the server, against a placeholder max heart rate, so it is marked an estimate. Effort is kept but not used for the number."
+      case .none:
+        return "No heart-rate readings in Health for this window. Strain is estimated on the server from type, effort and duration, and marked as an estimate. If a band recorded this time, check that its app writes heart rate to Health."
+      }
     case .sleep:
       return isProviderRow
         ? "Your time asleep replaces the device's for this night's score, sleep debt and tonight's need, and the next sync keeps it. Stages stay as the device measured them; moving the window keeps its awake time and moves the sleep with it."
@@ -354,6 +394,30 @@ struct HCCAddActivitySheet: View {
     asleepMin = windowMin
   }
 
+  /// Re-read Health for the window a moment after it settles; a wheel spinning
+  /// through minutes must not fire a query per tick.
+  private func scheduleHeartRateRead() {
+    heartRateTask?.cancel()
+    guard attachesHeartRate, end > start else {
+      heartRate = .idle
+      return
+    }
+    heartRate = .reading
+    let window = (start, end)
+    heartRateTask = Task {
+      try? await Task.sleep(nanoseconds: 400_000_000)
+      guard !Task.isCancelled else { return }
+      await HCCHealthKitUploader.shared.requestReadAuthorizationIfNeverAsked()
+      let read = await HCCHealthKitUploader.shared.heartRate(in: window.0, window.1)
+      guard !Task.isCancelled else { return }
+      if let read {
+        heartRate = .found(count: read.samples.count, source: read.source.name, avg: read.avgBpm, max: read.maxBpm)
+      } else {
+        heartRate = .none
+      }
+    }
+  }
+
   private func deleteActivity() {
     guard !isBusy, let editing else { return }
     isDeleting = true
@@ -377,6 +441,11 @@ struct HCCAddActivitySheet: View {
 
     let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
     Task {
+      // Read Health for the window being SAVED, not the one the card last
+      // described: the wheels may have moved after the debounced read.
+      let read = attachesHeartRate
+        ? await HCCHealthKitUploader.shared.heartRate(in: start, end)
+        : nil
       if let editing {
         var patch = HCCActivityPatch()
         patch.startAt = HCCTime.isoInstant(start)
@@ -389,6 +458,11 @@ struct HCCAddActivitySheet: View {
           // No effort for a device's row: it was never offered, and sending the
           // default would write a number nobody chose.
           patch.effort = isProviderRow ? nil : effort
+          if let read {
+            patch.avgHr = read.avgBpm
+            patch.maxHr = read.maxBpm
+            patch.hrSamples = read.samples
+          }
         }
         if let saved = await store.updateActivity(id: editing.id, patch) {
           onSaved?(saved)
@@ -405,7 +479,10 @@ struct HCCAddActivitySheet: View {
           effort: entry.isSleep ? nil : effort,
           notes: trimmed.isEmpty ? nil : trimmed,
           trainingSessionId: nil,
-          asleepMin: entry.isSleep ? asleepMin : nil
+          asleepMin: entry.isSleep ? asleepMin : nil,
+          avgHr: read?.avgBpm,
+          maxHr: read?.maxBpm,
+          hrSamples: read?.samples
         )
         if let saved = await store.addActivity(draft) {
           onSaved?(saved)

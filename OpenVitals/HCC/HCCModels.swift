@@ -944,6 +944,15 @@ struct HCCActivityCreate: Encodable {
   var trainingSessionId: String?
   /// SLEEP only: minutes asleep inside the window.
   var asleepMin: Int?
+  /// WORKOUT only: the heart rate Health holds for the window, read by the
+  /// Add sheet at save time (`HCCHealthKitUploader.heartRate(in:)`). The server
+  /// bins `hrSamples` into zones itself and scores the strain from them; it
+  /// keeps the row marked as an estimate because the phone has no measured max
+  /// heart rate to cut the zones against. `avgHr`/`maxHr` are display values
+  /// derived from the same series.
+  var avgHr: Int?
+  var maxHr: Int?
+  var hrSamples: [HCCLiveHrSample]?
 }
 
 /// `PATCH /api/mobile/v1/activities/{id}` body — every field optional, and an
@@ -961,9 +970,17 @@ struct HCCActivityPatch: Encodable {
   var notes: String?
   /// SLEEP only: minutes asleep inside the window.
   var asleepMin: Int?
+  /// WORKOUT only, hand-logged rows only: the heart rate Health holds for the
+  /// EDITED window, so a moved window is re-scored from what was measured
+  /// inside it rather than carrying the old window's zones. Same semantics as
+  /// on `HCCActivityCreate`.
+  var avgHr: Int?
+  var maxHr: Int?
+  var hrSamples: [HCCLiveHrSample]?
 
   var isEmpty: Bool {
     type == nil && startAt == nil && endAt == nil && effort == nil && notes == nil && asleepMin == nil
+      && avgHr == nil && maxHr == nil && hrSamples == nil
   }
 }
 

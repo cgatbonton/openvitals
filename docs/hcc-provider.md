@@ -294,6 +294,26 @@ night: offering Add before the list is known could log a second night on top of
 one the server already has. After any SLEEP write the store re-queues the day's
 home, sleep and plan reads (`reloadNightIfSleep`), because all three moved.
 
+**A hand-logged workout carries the heart rate Health holds for its window
+(2026-09-10).** When the Add sheet saves a workout — a new one, or an edit to a
+hand-logged one — it first asks HealthKit for every heart-rate sample inside
+the window (`HCCHealthKitUploader.heartRate(in:)`) and sends them as
+`hrSamples` with `avgHr`/`maxHr`, so the server bins zones and scores the strain
+from a measurement instead of the type × effort estimate. This read ignores
+the Watch source filter on purpose: the row stays `MANUAL` and files nothing
+under a device's name, so any app that wrote the window will do — a Watch,
+Google Health mirroring a Fitbit, anything else. Samples are grouped by the
+writing app and only the fullest source is sent, so two devices worn at once
+never double the time in every zone. The sheet's Strain card says what it found
+(count and source name) or that it found nothing, in which case the effort
+estimate stands. The server still marks the strain an estimate: the phone has
+no measured max heart rate, so the zones are cut against the server's
+placeholder ceiling. Sleep and nap rows, and a device's own workout row, do not
+take this path — a device's row is re-read from its own recording on the server.
+If Health was never asked for the read set (onboarding skipped it), the sheet
+asks once on open; a refused read looks identical to "no samples", because
+Health never says which.
+
 One encoding trap is worth knowing: `PUT /devices/preferred` takes
 `{"source": null}` to CLEAR the override, and its schema requires the key. Swift's
 synthesized `Encodable` omits a nil optional, which the server answers with a
@@ -775,6 +795,7 @@ Health → Sharing → Apps; it must never print "Authorized".
 | `HCC_DEBUG_HK_ANY_SOURCE=1` | Disables the Watch source filter (both the bundle-id and the device-model half). Simulator verification only — there is no Watch on a simulator. |
 | `HCC_DEBUG_HK_SEED=1` | Requests WRITE authorization for a few types and saves a fixture into HealthKit: 3 HRV, 2 resting HR, one running workout with 30 HR samples, and one four-stage night, all stamped with an `HKDevice` shaped like a real Apple Watch. DEBUG only; `NSHealthUpdateUsageDescription` exists for this and the shipped app never requests a share type. |
 | `HCC_DEBUG_HK_SYNC=1` | Runs one sweep at launch. |
+| `HCC_DEBUG_HK_WINDOW_HR=<hours>` | Runs the Add sheet's any-source heart-rate read over the last N hours and prints every source Health holds for it (name, bundle id, device model, sample count) plus the series the sheet would attach. Launch on the device with `xcrun devicectl device process launch --console -e '{"HCC_DEBUG_HK_WINDOW_HR":"24"}'` to read it; it is the proof that a band's heart rate is reachable for a window no device scored. |
 | `HCC_DEBUG_HK_FIXTURE=1` | Prints the encoded wire batch for the fixture and does not upload it. |
 | `HCC_DEBUG_HK_FIXTURE_UPLOAD=1` | Pushes that fixture through the REAL delivery path — pending files, ingest token, POST, response decode, state. **It MUTATES SERVER STATE.** Exists because the simulator's Health authorization sheet is a system alert `simctl` cannot dismiss, so a machine-driven run cannot get past the read prompt; everything downstream of HealthKit is still exercised against a real server. |
 | `HCC_DEBUG_INGEST_TOKEN=…` | Uses this ingest bearer instead of the Keychain's, the same way `HCC_DEBUG_TOKEN` stands in for the mobile one. |

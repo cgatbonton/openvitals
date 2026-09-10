@@ -1048,6 +1048,148 @@ final class HCCHealthKitBackgroundDelivery: NSObject, URLSessionDataDelegate, @u
   }
 }
 
+// ── Heart rate for a hand-logged window ──────────────────────────────────────
+
+/// The heart rate Health holds for an arbitrary window — what the Add sheet
+/// attaches to a hand-logged workout so the server can score it from a
+/// measurement instead of the type × effort estimate.
+///
+/// This read is the ONE place in the app that deliberately ignores the Watch
+/// source filter. The upload path above filters to Apple's own daemon + a Watch
+/// device because it files readings under the Watch's name on the server; a
+/// hand-logged workout files nothing under any device's name — its samples are
+/// binned into zones and discarded, and the row stays `MANUAL`. So any source
+/// that recorded the window will do: a Watch, Google Health mirroring a Fitbit,
+/// or another app. What must NOT happen is two sources being summed for the
+/// same minutes, which would double the time in every zone; so the samples are
+/// grouped by the app that wrote them and the fullest single source wins.
+struct HCCHealthKitWindowHeartRate {
+  struct Source: Equatable {
+    /// `sourceRevision.source.name` — the app's own display name.
+    let name: String
+    let bundleIdentifier: String
+    let deviceModel: String?
+    let count: Int
+  }
+
+  /// The source whose samples are attached.
+  let source: Source
+  /// Every source that wrote heart rate inside the window, fullest first.
+  let sources: [Source]
+  /// Ascending, from `source` only, bpm rounded to an integer.
+  let samples: [HCCLiveHrSample]
+  let avgBpm: Int
+  let maxBpm: Int
+  let firstAt: Date
+  let lastAt: Date
+}
+
+extension HCCHealthKitUploader {
+  /// The server refuses a body above this many samples; a window long enough
+  /// to exceed it is thinned evenly rather than truncated at one end.
+  static let maximumWindowSamples = 20_000
+  /// The route's accepted range for a bpm; anything outside is a sensor fault.
+  static let acceptableBpm = 30...250
+
+  /// Ask Health for the read set once, if it has never been asked. On a phone
+  /// where onboarding already put the question this is a no-op; where it was
+  /// skipped, the first hand-logged workout is the moment the app becomes a
+  /// Health reader, and the system sheet belongs there rather than at launch.
+  func requestReadAuthorizationIfNeverAsked() async {
+    guard HKHealthStore.isHealthDataAvailable() else { return }
+    let status: HKAuthorizationRequestStatus = await withCheckedContinuation { continuation in
+      healthStore.getRequestStatusForAuthorization(toShare: [], read: Self.readTypes) { status, _ in
+        continuation.resume(returning: status)
+      }
+    }
+    if status == .shouldRequest { await requestAuthorization() }
+  }
+
+  /// Heart-rate samples inside `start..<end` from ANY source, grouped by the
+  /// app that wrote them; the fullest source's series is returned. `nil` when
+  /// Health is unavailable, the read was refused (Health never says which —
+  /// a denied type simply returns nothing), or no source recorded the window.
+  func heartRate(in start: Date, _ end: Date) async -> HCCHealthKitWindowHeartRate? {
+    guard end > start,
+          HKHealthStore.isHealthDataAvailable(),
+          let type = HKObjectType.quantityType(forIdentifier: .heartRate)
+    else { return nil }
+    let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [.strictStartDate])
+    let unit = HKUnit.count().unitDivided(by: .minute())
+    let raw: [HKQuantitySample]
+    do {
+      raw = try await withCheckedThrowingContinuation { continuation in
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let query = HKSampleQuery(
+          sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]
+        ) { _, samples, error in
+          if let error {
+            continuation.resume(throwing: error)
+          } else {
+            continuation.resume(returning: (samples as? [HKQuantitySample]) ?? [])
+          }
+        }
+        healthStore.execute(query)
+      }
+    } catch {
+      return nil
+    }
+    return Self.windowHeartRate(from: raw.map { sample in
+      (
+        bundle: sample.sourceRevision.source.bundleIdentifier,
+        name: sample.sourceRevision.source.name,
+        device: sample.device?.model,
+        at: sample.startDate,
+        bpm: sample.quantity.doubleValue(for: unit)
+      )
+    })
+  }
+
+  /// The grouping and thinning, separated from HealthKit so it can be reasoned
+  /// about on its own: fullest source wins, out-of-range readings are dropped,
+  /// and a series over the server's cap is thinned evenly.
+  static func windowHeartRate(
+    from readings: [(bundle: String, name: String, device: String?, at: Date, bpm: Double)]
+  ) -> HCCHealthKitWindowHeartRate? {
+    let usable = readings.filter { acceptableBpm.contains(Int($0.bpm.rounded())) }
+    guard !usable.isEmpty else { return nil }
+
+    var order: [String] = []
+    var byBundle: [String: [(bundle: String, name: String, device: String?, at: Date, bpm: Double)]] = [:]
+    for reading in usable {
+      if byBundle[reading.bundle] == nil { order.append(reading.bundle) }
+      byBundle[reading.bundle, default: []].append(reading)
+    }
+    let sources: [HCCHealthKitWindowHeartRate.Source] = order
+      .map { bundle in
+        let group = byBundle[bundle] ?? []
+        return HCCHealthKitWindowHeartRate.Source(
+          name: group.first?.name ?? bundle,
+          bundleIdentifier: bundle,
+          deviceModel: group.first { $0.device != nil }?.device,
+          count: group.count
+        )
+      }
+      .sorted { $0.count > $1.count }
+    guard let winner = sources.first, let chosen = byBundle[winner.bundleIdentifier], !chosen.isEmpty else {
+      return nil
+    }
+
+    let stride = max(1, Int((Double(chosen.count) / Double(maximumWindowSamples)).rounded(.up)))
+    let thinned = chosen.enumerated().compactMap { $0.offset % stride == 0 ? $0.element : nil }
+    let bpms = thinned.map { Int($0.bpm.rounded()) }
+    return HCCHealthKitWindowHeartRate(
+      source: winner,
+      sources: sources,
+      samples: thinned.map { HCCLiveHrSample(t: HCCTime.isoInstant($0.at), bpm: Int($0.bpm.rounded())) },
+      avgBpm: Int((Double(bpms.reduce(0, +)) / Double(bpms.count)).rounded()),
+      maxBpm: bpms.max() ?? 0,
+      firstAt: thinned.first?.at ?? Date(),
+      lastAt: thinned.last?.at ?? Date()
+    )
+  }
+}
+
 // ── DEBUG seeding ────────────────────────────────────────────────────────────
 
 #if DEBUG
@@ -1204,10 +1346,38 @@ extension HCCHealthKitUploader {
     refreshDerivedState()
   }
 
+  /// `HCC_DEBUG_HK_WINDOW_HR=<hours>`: run the Add sheet's heart-rate read over
+  /// the last N hours and print every source Health holds for it, with the
+  /// one the sheet would attach. This is how "does Health actually have the
+  /// band's heart rate for a window no device scored?" is answered on a real
+  /// phone without a tap.
+  func debugPrintWindowHeartRateIfRequested() async {
+    guard let raw = ProcessInfo.processInfo.environment["HCC_DEBUG_HK_WINDOW_HR"],
+          let hours = Double(raw), hours > 0 else { return }
+    await requestReadAuthorizationIfNeverAsked()
+    let end = Date()
+    let start = end.addingTimeInterval(-hours * 3600)
+    let iso = ISO8601DateFormatter()
+    print("[HCC][hk] window-hr: \(iso.string(from: start)) → \(iso.string(from: end))")
+    guard let read = await heartRate(in: start, end) else {
+      print("[HCC][hk] window-hr: no heart-rate samples from any source in the window")
+      return
+    }
+    for source in read.sources {
+      let device = source.deviceModel.map { " device=\($0)" } ?? ""
+      print("[HCC][hk] window-hr: source=\"\(source.name)\" bundle=\(source.bundleIdentifier)\(device) samples=\(source.count)")
+    }
+    print(
+      "[HCC][hk] window-hr: attaching \(read.samples.count) samples from \"\(read.source.name)\" "
+        + "avg=\(read.avgBpm) max=\(read.maxBpm) first=\(iso.string(from: read.firstAt)) last=\(iso.string(from: read.lastAt))"
+    )
+  }
+
   /// `HCC_DEBUG_HK_SEED=1` / `HCC_DEBUG_HK_SYNC=1`, run once at launch.
   func debugRunLaunchHooksIfRequested() async {
     HCCHealthKitBatchSelfCheck.runIfRequested()
     await debugUploadFixtureIfRequested()
+    await debugPrintWindowHeartRateIfRequested()
     guard Self.debugSeedRequested
       || ProcessInfo.processInfo.environment["HCC_DEBUG_HK_SYNC"] == "1" else { return }
     await requestAuthorization()
