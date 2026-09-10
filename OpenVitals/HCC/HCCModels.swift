@@ -446,6 +446,10 @@ struct HCCDeckSignal: Decodable, Identifiable {
   let source: String
   /// `autonomic` | `thermo` | `body`.
   let system: String
+  /// The OPTIMAL band this stream is graded against — the instance profile's,
+  /// the same one `/vitals` sends and the web wearables page draws. Null means
+  /// no honest band exists for this stream, and it is then not graded at all.
+  let optimal: HCCOptimalRange?
 
   var id: String { "\(source)/\(slug)" }
 }

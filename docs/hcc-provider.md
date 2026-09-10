@@ -450,26 +450,41 @@ and every card stuck on "Loading…"). Top to bottom:
 The order is Chris's (2026-09-06): key vitals above the monitor, active insights
 below it.
 
-### Wearables Is Not A Second Biomarkers Page
+### Wearables: Graded Against Optimal Targets, With Movement Underneath
 
 `HCCWearablesView` is the web `/wearables` deck, off `GET /api/mobile/v1/deck` —
 whose DTOs and client method had existed since the read API landed with nothing
-drawing them. It asks a DIFFERENT question from every other Health page, and the
-screen says so in a footnote because the two are easy to conflate:
+drawing them.
 
-- **Biomarkers** grades a value against the metric catalog's **optimal target** —
-  "is this number where it should be".
-- **Wearables** scores each stream's last 14 days against **its own rolling
-  baseline**, in standard deviations of this owner's own noise — "has this number
-  moved". A stream can sit far from its optimal target and read Steady here, and
-  one inside its target can Flag.
+**REVISED 2026-09-10 (Chris: "they should be graded against optimal targets").**
+It first shipped grading each stream only against its own rolling baseline, in
+standard deviations. That is movement, not position, and it is not what this
+project means by GRADING — the app grades against the instance profile's optimal
+bands, and this page now does too. Each row carries both readings, in this
+order:
 
-Nothing on that screen is a target grading, and nothing on it may be presented as
-one. Its verdicts (`steady` / `watch` / `flag` / `calibrating` / `no-data`), its
-σ, its baselines and its wear coverage are all the server's; `HCCWearableVerdict`
-is the single home for the five words and their tones, and "steady" is the ACCENT
-tone rather than green on purpose — green would read as a health verdict, which
-this scale never gives.
+- **the grade** — the 14-day mean against the OPTIMAL band, as the pill and the
+  row's dot (`HCCOptimalRange.grade`: in / below / above target). Off target is
+  amber, never red: distance from a target is a direction to work in.
+- **the movement** — σ against the stream's own baseline plus the deck's verdict
+  word (`steady` / `watch` / `flag` / `calibrating` / `no-data`), on the muted
+  line underneath. `HCCWearableVerdict` is the single home for those five words.
+
+The two disagree often and that is the point — a stream can read "In target ·
+Watch" (in position, moving) or "Above target · Steady" (settled somewhere it
+should not be). The footnote says so on the screen.
+
+**The band comes from the server, not the phone.** `mobileDeck` attaches
+`optimal` to every signal through the SAME helper the web wearables page uses
+(`optimalFor`, and `weightOptimal`'s lean-mass derivation for `weight`), so the
+two surfaces cannot grade one reading two ways. A stream with no honest band
+gets null, is NOT graded, and its row says plainly that no optimal target exists
+— nothing here invents a target. On the `chris` profile 17 of the 21 streams
+carry one.
+
+`HCCOptimalRange.placement(for:)` is the one home for the band-strip arithmetic
+(the rail shades 30%–72% as the optimal window); the Health monitor's rows call
+it too, rather than keeping a second copy.
 
 Two rendering rules the payload forces, both instances of **Never Fabricate A
 Value**: `series` is the stream's whole history and outlives the 14-day window,

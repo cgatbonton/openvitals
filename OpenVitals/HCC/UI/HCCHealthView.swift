@@ -531,20 +531,12 @@ private struct MonitorRow: View {
     return HCCFormat.measurement(value, unit: series.unit, fractionDigits: digits)
   }
 
-  /// Where the value sits in the strip. The `.band` CSS shades 30%–72% of the
-  /// rail as the optimal window, so the band's own low and high map onto those
-  /// two fractions and everything outside is clamped to the visible rail.
+  /// Where the value sits in the strip. The mapping itself lives on
+  /// `HCCOptimalRange` so the Wearables deck places its markers by the same
+  /// arithmetic rather than a second copy of it.
   private var placement: Double? {
-    guard let value = displayValue,
-          let optimal = series.optimal,
-          let low = optimal.low,
-          let high = optimal.high,
-          high > low
-    else {
-      return nil
-    }
-    let fraction = (value - low) / (high - low)
-    return min(max(0.30 + fraction * 0.42, 0.02), 0.98)
+    guard let value = displayValue else { return nil }
+    return series.optimal?.placement(for: value)
   }
 }
 

@@ -1,21 +1,31 @@
 import SwiftUI
 
 /// `S.wearables` — the unified wearable deck: every stream this instance
-/// collects, each scored against ITS OWN rolling baseline.
+/// collects, graded against its OPTIMAL TARGET.
 ///
-/// That is the whole reason this is a separate page from Biomarkers, and the
-/// distinction is load-bearing rather than cosmetic. Biomarkers grades a value
-/// against the metric catalog's OPTIMAL TARGET — "is this number where it
-/// should be". The deck asks a different question — "has this number MOVED,
-/// relative to its own noise" — and answers it in standard deviations of this
-/// owner's own baseline. A stream can sit a long way from its optimal target
-/// and be perfectly steady here, and a stream inside its target can flag. So
-/// nothing on this screen is a target grading, and the footnote says so in
-/// words rather than leaving the reader to infer it.
+/// REVISED 2026-09-10 (Chris: "they should be graded against optimal targets").
+/// The page first shipped grading each stream only against its own rolling
+/// baseline, in standard deviations — movement, not position. That is a real
+/// reading and it is still here, but it is not what this project means by
+/// GRADING. The app grades against the instance profile's optimal bands, and
+/// this page now does the same as every other: the pill on each row says
+/// whether the stream is in, below or above its target.
 ///
-/// Everything drawn is the server's: the verdict, the σ, the baseline, the wear
-/// coverage. This view computes no judgement of its own and invents no value —
-/// a stream with no reading in the window says so, and says when it was last
+/// The two readings answer different questions and the row shows both, in
+/// their proper order:
+///
+/// - **the grade** — where the 14-day mean sits against the optimal band
+///   (`HCCOptimalRange.grade`), which is the pill and the dot;
+/// - **the movement** — how far it has drifted from its OWN baseline in σ, plus
+///   the deck's verdict word, which is the muted line underneath.
+///
+/// A stream with no honest band is NOT graded — no target is invented for it.
+/// Those rows fall back to naming the movement verdict and say plainly that no
+/// optimal target exists for the stream.
+///
+/// Everything drawn is the server's: the band, the verdict, the σ, the
+/// baselines, the wear coverage. This view invents no value and no target — a
+/// stream with no reading in the window says so, and says when it was last
 /// seen, instead of showing a stale number as if it were current.
 struct HCCWearablesView: View {
   @ObservedObject var store: HealthDataStore
@@ -23,7 +33,7 @@ struct HCCWearablesView: View {
 
   var body: some View {
     HCCScreen {
-      HCCDetailHeader(title: "Wearables", subtitle: "14-day window · vs own baseline", size: 24)
+      HCCDetailHeader(title: "Wearables", subtitle: "14-day means · graded vs optimal targets", size: 24)
 
       if let response = load.value {
         if response.deck.isEmpty {
@@ -36,9 +46,12 @@ struct HCCWearablesView: View {
           confounders(response.deck)
           wear(response)
           HCCFootnote(
-            "Each stream is read over its last 14 days against its own rolling baseline, "
-              + "not against an optimal target — a stream can be steady here and still be off "
-              + "its target on the Biomarkers page. Steady, Watch and Flag are the server's own verdicts."
+            "Each stream's last 14 days are averaged and graded against your optimal target — "
+              + "the instance's own researched band, never a lab reference range. Underneath each "
+              + "grade is the second reading: how far the stream has moved from its OWN baseline, "
+              + "in standard deviations, with the server's verdict. A stream can be in target and "
+              + "still be moving, or off target and perfectly steady. A stream with no honest "
+              + "target is not graded."
           )
         }
       } else if let error = load.errorText {
@@ -147,7 +160,11 @@ struct HCCWearablesView: View {
   }
 
   private static let knownSystems: [(key: String, title: String, caption: String)] = [
-    ("autonomic", "Autonomic", "Nervous-system streams, each scored against its own noise."),
+    // The web's caption for this group says these are "scored against their own
+    // noise", which was true when the σ was the grade. It is not the grade any
+    // more, so the caption describes the streams instead of the method — the
+    // method is stated once, in the header and the footnote.
+    ("autonomic", "Autonomic", "Nervous-system streams — the first to move."),
     ("thermo", "Thermo & sleep", "Temperature and the sleep context around it."),
     ("body", "Body composition", "What the scale sees — lean mass is the guarded metric."),
   ]
@@ -178,20 +195,34 @@ private struct SystemCard: View {
 
 // ── Signal row ────────────────────────────────────────────────────────────────
 
-/// One stream: its name and 14-day mean, a trace of the window, and the
-/// server's verdict — with the baseline it was judged against spelled out
-/// underneath, because a σ with no baseline behind it is not a claim anyone can
-/// check.
+/// One stream, read top to bottom in the order the project grades things: what
+/// it is and what it reads, then how that sits against its OPTIMAL TARGET, then
+/// — muted, underneath — how far it has moved from its own baseline.
+///
+/// The dot and the pill both carry the GRADE, so they cannot disagree. When
+/// there is no band, or no value to grade, neither one shows a grade: the pill
+/// falls back to naming the movement verdict and the target line says plainly
+/// that no optimal target exists. Nothing here manufactures a target.
 private struct SignalRow: View {
   let signal: HCCDeckSignal
   let showsDivider: Bool
+
+  /// The grade, and only when there is both a reading and an honest band to
+  /// grade it against. Nil means this row is NOT graded — and then nothing on
+  /// it may be dressed as a grade.
+  private var grade: HCCTargetGrade? {
+    guard let current = signal.current, current.isFinite, let optimal = signal.optimal else {
+      return nil
+    }
+    return optimal.grade(current)
+  }
 
   var body: some View {
     VStack(spacing: 0) {
       VStack(alignment: .leading, spacing: 5) {
         HStack(alignment: .center, spacing: 10) {
           Circle()
-            .fill(HCCWearableVerdict.color(signal.verdict))
+            .fill(grade?.color ?? HCCTheme.Color.muted)
             .frame(width: 8, height: 8)
 
           Text(signal.displayName)
@@ -209,7 +240,7 @@ private struct SignalRow: View {
           if signal.current != nil, signal.series.count > 1 {
             HCCSparkline(
               values: signal.series.map(\.value),
-              color: HCCWearableVerdict.color(signal.verdict).opacity(0.9),
+              color: (grade?.color ?? HCCTheme.Color.muted).opacity(0.9),
               height: 16
             )
             .frame(width: 46)
@@ -232,21 +263,49 @@ private struct SignalRow: View {
           .lineLimit(1)
         }
 
+        // The grade line: the target, and the verdict on it.
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(Self.caption(signal))
+          Text(targetText)
             .font(HCCTheme.Font.data(size: 10))
-            .foregroundStyle(HCCTheme.Color.muted2)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
+            .foregroundStyle(HCCTheme.Color.muted)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
           Spacer(minLength: 8)
-          HCCPill(HCCWearableVerdict.label(signal.verdict), tone: HCCWearableVerdict.tone(signal.verdict))
+          HCCPill(pillText, tone: pillTone)
         }
+
+        // The second reading, deliberately quieter than the grade above it.
+        Text(Self.movement(signal, isGraded: grade != nil))
+          .font(HCCTheme.Font.data(size: 10))
+          .foregroundStyle(HCCTheme.Color.muted2)
+          .lineLimit(2)
+          .fixedSize(horizontal: false, vertical: true)
       }
       .padding(.vertical, 9)
 
       if showsDivider { HCCDivider() }
     }
     .accessibilityElement(children: .combine)
+  }
+
+  /// The band this row is graded against, or the plain statement that it has
+  /// none. A stream with a band but no reading still shows its target — the
+  /// target exists whether or not the wrist reported.
+  private var targetText: String {
+    guard let text = signal.optimal?.targetText(unit: signal.unit) else {
+      return "No optimal target for this stream"
+    }
+    return "Target \(text)"
+  }
+
+  /// The grade when there is one; otherwise the movement verdict, which is then
+  /// the only thing this row can honestly say about itself.
+  private var pillText: String {
+    grade?.label ?? HCCWearableVerdict.label(signal.verdict)
+  }
+
+  private var pillTone: HCCPill.Tone {
+    grade?.tone ?? HCCWearableVerdict.tone(signal.verdict)
   }
 
   /// The window's mean, at the precision the stream actually carries. A resting
@@ -257,36 +316,46 @@ private struct SignalRow: View {
     return HCCFormat.decimal(current, whole ? 0 : 1)
   }
 
-  /// What the verdict was reached against, in the server's own numbers.
-  static func caption(_ signal: HCCDeckSignal) -> String {
+  /// How far the stream has moved against its OWN baseline — the deck's
+  /// original reading, kept underneath the grade.
+  ///
+  /// `isGraded` decides whether the verdict word is appended: when the row is
+  /// not graded the pill is already showing that word, and printing it twice on
+  /// one row reads as two different findings.
+  static func movement(_ signal: HCCDeckSignal, isGraded: Bool) -> String {
+    var parts: [String] = []
+
     if let mean = signal.baselineMean, let sd = signal.baselineSd {
       var text = ""
       if let deviation = signal.deviationSd, deviation.isFinite {
         text += String(format: "%+.1fσ vs ", deviation)
       }
-      text += "baseline \(HCCFormat.decimal(mean, 1))"
-      text += " ± \(HCCFormat.decimal(sd, 1))"
+      text += "baseline \(HCCFormat.decimal(mean, 1)) ± \(HCCFormat.decimal(sd, 1))"
       if let unit = signal.unit, !unit.isEmpty { text += " \(unit)" }
       text += " · \(signal.baselineNights) nights"
+      parts.append(text)
       if signal.daysOutsideBand > 1 {
-        text += " · \(signal.daysOutsideBand) days outside band"
+        parts.append("\(signal.daysOutsideBand) days outside band")
       }
-      return text
+    } else if signal.verdict == "calibrating" {
+      // The threshold is the server's and is not on the wire, so this counts up
+      // rather than inventing an "n of 14".
+      parts.append(
+        signal.baselineNights == 0
+          ? "No baseline nights yet"
+          : "\(signal.baselineNights) baseline nights so far"
+      )
+    } else if let lastSeen = signal.lastSeen, let instant = HCCTime.instant(lastSeen) {
+      parts.append(
+        "No readings in the window · last seen "
+          + HealthDataStore.hccShortDayLabel(HealthDataStore.hccDayKey(instant))
+      )
+    } else {
+      parts.append("No readings on record")
     }
-    // No baseline yet. Say which of the two reasons it is rather than printing
-    // an empty line: still gathering nights, or nothing arriving at all.
-    // The pill already says "Calibrating", so the caption says the one thing it
-    // cannot: how far along. The threshold is the server's and is not on the
-    // wire, so this counts up rather than inventing an "n of 14".
-    if signal.verdict == "calibrating" {
-      return signal.baselineNights == 0
-        ? "No baseline nights yet"
-        : "\(signal.baselineNights) baseline nights so far"
-    }
-    if let lastSeen = signal.lastSeen, let instant = HCCTime.instant(lastSeen) {
-      return "No readings in the window · last seen \(HealthDataStore.hccShortDayLabel(HealthDataStore.hccDayKey(instant)))"
-    }
-    return "No readings on record"
+
+    if isGraded { parts.append(HCCWearableVerdict.label(signal.verdict)) }
+    return parts.joined(separator: " · ")
   }
 }
 

@@ -389,6 +389,84 @@ struct HCCBand: View {
   }
 }
 
+// ── Optimal band placement and grading ───────────────────────────────────────
+
+/// Where a value sits against an OPTIMAL target — the app's one grading
+/// vocabulary. Never "normal": a value can sit inside a lab's population range
+/// and still be below the target this app grades against, and calling that
+/// "normal" is the exact swap the project forbids.
+enum HCCTargetGrade {
+  case below
+  case inTarget
+  case above
+
+  var label: String {
+    switch self {
+    case .below: "Below target"
+    case .inTarget: "In target"
+    case .above: "Above target"
+    }
+  }
+
+  /// Off target is amber, not red: distance from a target is a direction to
+  /// work in, not an alert. Red stays for the things that raise one.
+  var tone: HCCPill.Tone {
+    switch self {
+    case .inTarget: .good
+    case .below, .above: .warn
+    }
+  }
+
+  var color: Color {
+    switch self {
+    case .inTarget: HCCTheme.Color.good
+    case .below, .above: HCCTheme.Color.warn
+    }
+  }
+}
+
+extension HCCOptimalRange {
+  /// Which side of the target `value` falls on. A one-sided band grades only on
+  /// the side it has — "≥ 45 ms" cannot put anything above target.
+  func grade(_ value: Double) -> HCCTargetGrade {
+    if let low, value < low { return .below }
+    if let high, value > high { return .above }
+    return .inTarget
+  }
+
+  /// Where `value` sits on `HCCBand`'s rail.
+  ///
+  /// The strip shades 30%–72% of its width as the optimal window, so the band's
+  /// own low and high map onto exactly those two fractions and anything outside
+  /// is clamped to the visible rail. One home for the mapping: the Health
+  /// monitor and the Wearables deck draw the same strip, and two copies of this
+  /// arithmetic would eventually place the same reading in two places.
+  func placement(for value: Double) -> Double? {
+    guard let low, let high, high > low else { return nil }
+    let fraction = (value - low) / (high - low)
+    return min(max(0.30 + fraction * 0.42, 0.02), 0.98)
+  }
+
+  /// "45–58 bpm", "≥ 45 ms", "≤ 5" — the target in words, or nil when the band
+  /// has no bound at all to state.
+  func targetText(unit: String?) -> String? {
+    let suffix = (unit?.isEmpty == false) ? " \(unit!)" : ""
+    switch (low, high) {
+    case let (low?, high?): return "\(Self.bound(low))–\(Self.bound(high))\(suffix)"
+    case let (low?, nil): return "≥ \(Self.bound(low))\(suffix)"
+    case let (nil, high?): return "≤ \(Self.bound(high))\(suffix)"
+    default: return nil
+    }
+  }
+
+  /// A bound at the precision it was actually written with. The bands are hand
+  /// researched and mix the two — 45 bpm, 92.3 °F — and printing "45.0" implies
+  /// a tenth of a beat that nobody chose.
+  private static func bound(_ value: Double) -> String {
+    HCCFormat.decimal(value, value == value.rounded() ? 0 : 1)
+  }
+}
+
 // ── Z-score bar ──────────────────────────────────────────────────────────────
 
 /// `.z` — a signed deviation bar growing out of a centre tick, clamped to ±2 SD.
