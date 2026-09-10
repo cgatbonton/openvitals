@@ -110,20 +110,22 @@ struct HCCTrainingWeekCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(alignment: .center) {
-        HCCLabel("Week of \(HCCTrainingFormat.shortDate(weekStart))", size: 11)
+        HCCLabel("Week of \(HCCTrainingFormat.shortDate(weekStart))")
         Spacer(minLength: 8)
         chip
       }
+      // The mockup's `padding-bottom:10px` on the card's label row. Inside a
+      // card, so it is not the between-cards rhythm the stack owns.
+      .padding(.bottom, 10)
 
       HStack(spacing: 4) {
         ForEach(days) { day in
           dayTile(day)
         }
       }
-      .padding(.top, 8)
 
       HCCFootnote(helper)
-        .padding(.top, 6)
+        .padding(.top, 8)
     }
     .hccCard()
   }
@@ -133,14 +135,16 @@ struct HCCTrainingWeekCard: View {
     HStack(spacing: 5) {
       arrow("‹", delta: -1, isEnabled: weekOffset > 0, label: "Previous week")
       Text(weekOffset == 0 ? "this week" : "next week")
-        .font(HCCTheme.Font.data(size: 10.5, weight: .medium))
-        .tracking(0.42)
+        .font(HCCTheme.Font.data(size: 10, weight: .medium))
+        .tracking(0.4)
         .foregroundStyle(HCCTheme.Color.muted)
       arrow("›", delta: 1, isEnabled: weekOffset < 1, label: "Next week")
     }
     .padding(.horizontal, 8)
-    .padding(.vertical, 5)
-    .overlay(Capsule().strokeBorder(HCCTheme.Color.line, lineWidth: 1))
+    .padding(.vertical, 3)
+    // The handoff's chip: a `control2` fill and nothing else. The "Tinted"
+    // direction separates by fill, so the old hairline is gone.
+    .background(Capsule().fill(HCCTheme.Color.control2))
   }
 
   private func arrow(_ glyph: String, delta: Int, isEnabled: Bool, label: String) -> some View {
@@ -168,23 +172,25 @@ struct HCCTrainingWeekCard: View {
     return Button { onSelectDay(day.date) } label: {
       VStack(spacing: 3) {
         Text(HCCTrainingFormat.shortDow(day.date))
-          .font(HCCTheme.Font.data(size: 10, weight: .semibold))
+          .font(HCCTheme.Font.data(size: 10, weight: .medium))
           .foregroundStyle(HCCTheme.Color.text)
         Text(HCCTrainingFormat.dayNumber(day.date))
-          .font(HCCTheme.Font.data(size: 10, weight: .semibold))
-          .foregroundStyle(isToday ? HCCTheme.Color.text : HCCTheme.Color.muted)
+          .font(HCCTheme.Font.data(size: 10))
+          .foregroundStyle(HCCTheme.Color.muted)
         Text(HCCTrainingFormat.stripLabel(day))
-          .font(HCCTheme.Font.data(size: 8.5))
-          .foregroundStyle(HCCTheme.Color.accent)
+          .font(HCCTheme.Font.body(size: 8.5))
+          .foregroundStyle(HCCTheme.Color.accentText)
           .lineLimit(1)
-          .minimumScaleFactor(0.6)
-          // A definite width proposal is what lets `minimumScaleFactor` shrink
-          // the longest tag ("Run club") instead of letting it run past the tile.
+          .truncationMode(.tail)
+          // A definite width proposal is what keeps the longest tag ("Run club")
+          // ellipsised inside the tile instead of running past it.
           .frame(maxWidth: .infinity, minHeight: 9)
           .padding(.horizontal, 2)
       }
       .frame(maxWidth: .infinity)
+      // The handoff's tile box: 7 above, 2 at the sides, 10 below.
       .padding(.top, 7)
+      .padding(.horizontal, 2)
       .padding(.bottom, 10)
       .background(alignment: .bottom) {
         // `.wk span.has::after` — the marker that says the day holds work.
@@ -196,13 +202,18 @@ struct HCCTrainingWeekCard: View {
         }
       }
       .background(
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+        RoundedRectangle(cornerRadius: HCCTheme.Radius.small, style: .continuous)
           .fill(isSelected ? HCCTheme.Color.accent.opacity(0.22) : HCCTheme.Color.card2)
       )
-      .overlay(
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-          .strokeBorder(isToday ? HCCTheme.Color.accent : HCCTheme.Color.line, lineWidth: 1)
-      )
+      // The only borders left on this screen, and both are in the handoff: the
+      // selected tile and today. Every other hairline is gone — the "Tinted"
+      // direction separates by fill.
+      .overlay {
+        if isSelected || isToday {
+          RoundedRectangle(cornerRadius: HCCTheme.Radius.small, style: .continuous)
+            .strokeBorder(HCCTheme.Color.accent, lineWidth: 1)
+        }
+      }
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -232,67 +243,79 @@ struct HCCTrainingSetTable: View {
     var set: HCCTrainingSet?
   }
 
+  /// The handoff's grid, `28 64 1fr 40 22` at gap 8. Fixed widths rather than a
+  /// `Grid`, because the header and each row are separate views and only a
+  /// shared column table makes them line up.
   private static let columns: (index: CGFloat, weight: CGFloat, reps: CGFloat, box: CGFloat) =
-    (24, 56, 40, 22)
+    (28, 64, 40, 22)
+  private static let gap: CGFloat = 8
 
   var body: some View {
     VStack(spacing: 0) {
       header
-      ForEach(Array(rows.enumerated()), id: \.element.id) { offset, row in
+      ForEach(rows) { row in
         setRow(row)
-        if offset < rows.count - 1 { HCCDivider() }
       }
     }
   }
 
   private var header: some View {
-    HStack(spacing: 6) {
-      HCCLabel("Set", size: 9.5).frame(width: Self.columns.index, alignment: .leading)
-      HCCLabel("Weight", size: 9.5).frame(width: Self.columns.weight, alignment: .leading)
-      HCCLabel("Plates / side", size: 9.5).frame(maxWidth: .infinity, alignment: .leading)
-      HCCLabel("Reps", size: 9.5).frame(width: Self.columns.reps, alignment: .trailing)
+    HStack(spacing: Self.gap) {
+      HCCLabel("Set").frame(width: Self.columns.index, alignment: .leading)
+      HCCLabel("Weight").frame(width: Self.columns.weight, alignment: .leading)
+      HCCLabel("Plates / side").frame(maxWidth: .infinity, alignment: .leading)
+      HCCLabel("Reps").frame(width: Self.columns.reps, alignment: .trailing)
       Color.clear.frame(width: Self.columns.box, height: 1)
     }
-    .padding(.vertical, 6)
-    .overlay(alignment: .bottom) { HCCDivider() }
+    .padding(.bottom, 4)
   }
 
+  /// Each row carries its own top rule, which is what gives the header its
+  /// separator too — the handoff's `border-top` on `.setrow`, not a divider
+  /// between rows.
   private func setRow(_ row: Row) -> some View {
     let prescribed = row.prescribed
     let logged = row.actualReps != nil
-    return HStack(spacing: 6) {
-      Text(String(prescribed.setIndex))
-        .font(HCCTheme.Font.data(size: 12, weight: .medium))
-        .foregroundStyle(HCCTheme.Color.muted)
-        .frame(width: Self.columns.index, alignment: .leading)
+    return VStack(spacing: 0) {
+      HCCDivider()
+      HStack(spacing: Self.gap) {
+        Text(String(prescribed.setIndex))
+          .font(HCCTheme.Font.data(size: 11))
+          .foregroundStyle(HCCTheme.Color.muted)
+          .frame(width: Self.columns.index, alignment: .leading)
 
-      Text("\(HCCFiveThreeOne.formatKg(prescribed.weightKg)) kg")
-        .font(HCCTheme.Font.data(size: 12, weight: .medium))
-        .monospacedDigit()
-        .foregroundStyle(HCCTheme.Color.text)
-        .frame(width: Self.columns.weight, alignment: .leading)
+        Text("\(HCCFiveThreeOne.formatKg(prescribed.weightKg)) kg")
+          .font(HCCTheme.Font.display(size: 14, weight: .semibold))
+          .monospacedDigit()
+          .foregroundStyle(HCCTheme.Color.text)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
+          .frame(width: Self.columns.weight, alignment: .leading)
 
-      Text(HCCFiveThreeOne.formatPlates(HCCFiveThreeOne.platesPerSide(prescribed.weightKg)))
-        .font(HCCTheme.Font.data(size: 12, weight: .medium))
-        .foregroundStyle(HCCTheme.Color.muted)
-        .lineLimit(1)
-        .minimumScaleFactor(0.75)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        Text(HCCFiveThreeOne.formatPlates(HCCFiveThreeOne.platesPerSide(prescribed.weightKg)))
+          .font(HCCTheme.Font.data(size: 10.5))
+          .foregroundStyle(HCCTheme.Color.muted)
+          .lineLimit(1)
+          .minimumScaleFactor(0.75)
+          .frame(maxWidth: .infinity, alignment: .leading)
 
-      Text(repsText(row))
-        .font(HCCTheme.Font.data(size: 12, weight: .medium))
-        .monospacedDigit()
-        .foregroundStyle(prescribed.isAmrap ? HCCTheme.Color.strain : HCCTheme.Color.text)
-        .frame(width: Self.columns.reps, alignment: .trailing)
+        // Muted until the set is logged, primary once it is: the column reads
+        // as a checklist rather than as four identical numbers.
+        Text(repsText(row))
+          .font(HCCTheme.Font.data(size: 12))
+          .monospacedDigit()
+          .foregroundStyle(logged ? HCCTheme.Color.text : HCCTheme.Color.muted)
+          .frame(width: Self.columns.reps, alignment: .trailing)
 
-      if let onToggle {
-        checkbox(isOn: logged) { onToggle(row) }
-          .frame(width: Self.columns.box)
-      } else {
-        Color.clear.frame(width: Self.columns.box, height: 1)
+        if let onToggle {
+          checkbox(isOn: logged) { onToggle(row) }
+            .frame(width: Self.columns.box)
+        } else {
+          Color.clear.frame(width: Self.columns.box, height: 1)
+        }
       }
+      .padding(.vertical, 8)
     }
-    .padding(.vertical, 8)
   }
 
   /// What was done, when something was; otherwise what is prescribed.
@@ -303,20 +326,10 @@ struct HCCTrainingSetTable: View {
 
   private func checkbox(isOn: Bool, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      RoundedRectangle(cornerRadius: 6, style: .continuous)
-        .fill(isOn ? HCCTheme.Color.accent : Color.clear)
-        .overlay(
-          RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .strokeBorder(isOn ? HCCTheme.Color.accent : HCCTheme.Color.muted, lineWidth: 1.5)
-        )
-        .overlay {
-          if isOn {
-            Image(systemName: "checkmark")
-              .font(.system(size: 11, weight: .bold))
-              .foregroundStyle(HCCTheme.Color.bg)
-          }
-        }
-        .frame(width: 20, height: 20)
+      // The shared box at the handoff's set-row size, so a set and a dose can
+      // never drift into two different checkboxes.
+      HCCCheckbox(isOn: isOn, size: 20, radius: 6)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .disabled(!isEnabled)
@@ -339,21 +352,24 @@ struct HCCTrainingAmrapBar: View {
   let onLog: () -> Void
 
   var body: some View {
+    // The handoff's AMRAP line: a plain row under the set table, not a boxed
+    // sub-card. The stepper and the Log button are unchanged — only the box,
+    // its hairline and the type moved.
     HStack(spacing: 8) {
       Text("AMRAP reps")
-        .font(HCCTheme.Font.body(size: 11.5, weight: .medium))
-        .foregroundStyle(HCCTheme.Color.text)
+        .font(HCCTheme.Font.body(size: 11))
+        .foregroundStyle(HCCTheme.Color.muted)
 
       stepButton("−", delta: -1, isEnabled: isEnabled && reps > 0, label: "One fewer rep")
       Text(String(reps))
-        .font(HCCTheme.Font.display(size: 18, weight: .medium))
+        .font(HCCTheme.Font.display(size: 16, weight: .semibold))
         .monospacedDigit()
         .frame(minWidth: 22)
         .foregroundStyle(HCCTheme.Color.text)
       stepButton("+", delta: 1, isEnabled: isEnabled && reps < 100, label: "One more rep")
 
       Text("e1RM \(HCCFiveThreeOne.formatKg(HCCFiveThreeOne.epleyE1rm(weightKg: weightKg, reps: reps))) kg")
-        .font(HCCTheme.Font.data(size: 11))
+        .font(HCCTheme.Font.data(size: 10.5))
         .foregroundStyle(HCCTheme.Color.muted)
         .lineLimit(1)
         .minimumScaleFactor(0.8)
@@ -364,26 +380,17 @@ struct HCCTrainingAmrapBar: View {
           .font(HCCTheme.Font.body(size: 10.5, weight: .semibold))
           .tracking(0.84)
           .textCase(.uppercase)
-          .foregroundStyle(HCCTheme.Color.bg)
+          .foregroundStyle(HCCTheme.Color.ctaText)
           .padding(.horizontal, 10)
           .frame(height: 26)
           .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(HCCTheme.Color.accent)
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(HCCTheme.Color.ctaGradient)
           )
       }
       .buttonStyle(.plain)
       .disabled(!isEnabled || loggedReps == reps)
       .opacity(isEnabled && loggedReps != reps ? 1 : 0.45)
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 8)
-    .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous).fill(HCCTheme.Color.card2)
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .strokeBorder(HCCTheme.Color.line, lineWidth: 1)
-    )
     .padding(.top, 10)
   }
 
@@ -394,11 +401,7 @@ struct HCCTrainingAmrapBar: View {
         .foregroundStyle(HCCTheme.Color.text)
         .frame(width: 26, height: 26)
         .background(
-          RoundedRectangle(cornerRadius: 8, style: .continuous).fill(HCCTheme.Color.card)
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .strokeBorder(HCCTheme.Color.line, lineWidth: 1)
+          RoundedRectangle(cornerRadius: 8, style: .continuous).fill(HCCTheme.Color.control2)
         )
     }
     .buttonStyle(.plain)
@@ -463,21 +466,22 @@ struct HCCTrainingLiftCard<Footer: View>: View {
       HStack(alignment: .top, spacing: 10) {
         VStack(alignment: .leading, spacing: 3) {
           Text(lift.label)
-            .font(HCCTheme.Font.display(size: 16, weight: .medium))
+            .font(HCCTheme.Font.display(size: 17, weight: .semibold))
+            .tracking(-0.3)
             .foregroundStyle(HCCTheme.Color.text)
           Text(
             "Training max \(HCCFiveThreeOne.formatKg(trainingMaxKg)) kg · week \(week) · "
               + HCCFiveThreeOne.weekLabel(week)
           )
-          .font(HCCTheme.Font.data(size: 11))
+          .font(HCCTheme.Font.data(size: 10.5))
           .foregroundStyle(HCCTheme.Color.muted)
         }
         Spacer(minLength: 8)
         HCCPill(pillText, tone: isPreview ? .muted : .accent)
       }
+      .padding(.bottom, 10)
 
       HCCTrainingSetTable(rows: rows, isEnabled: isEnabled, onToggle: onToggle)
-        .padding(.top, 4)
 
       footer()
     }
@@ -533,12 +537,13 @@ struct HCCTrainingConditioningCard: View {
         VStack(alignment: .leading, spacing: 3) {
           HStack(spacing: 6) {
             Text(title)
-              .font(HCCTheme.Font.display(size: 16, weight: .medium))
+              .font(HCCTheme.Font.display(size: 17, weight: .semibold))
+              .tracking(-0.3)
               .foregroundStyle(HCCTheme.Color.text)
             if isOptional { HCCPill("optional", tone: .muted) }
           }
           Text(subtitle)
-            .font(HCCTheme.Font.data(size: 11))
+            .font(HCCTheme.Font.data(size: 10.5))
             .foregroundStyle(HCCTheme.Color.muted)
         }
         Spacer(minLength: 8)
@@ -547,13 +552,22 @@ struct HCCTrainingConditioningCard: View {
 
       if let onMark {
         HCCButtonRow(
-          primary: onStartLive.map { HCCButtonSpec(title: "Start live activity", isEnabled: isEnabled, action: $0) },
+          primary: onStartLive.map {
+            HCCButtonSpec(
+              title: "Start live activity",
+              isEnabled: isEnabled,
+              systemImage: "play.fill",
+              action: $0
+            )
+          },
           secondary: HCCButtonSpec(title: isDone ? "Undo" : "Mark done", isEnabled: isEnabled, action: onMark)
         )
-        .padding(.top, 6)
+        .padding(.top, 10)
       }
     }
-    .hccCard()
+    // The card that belongs to the day's conditioning work carries the sleep
+    // tint, the handoff's "a card that belongs to a metric wears its colour".
+    .hccCard(tint: HCCTheme.Color.sleep)
   }
 }
 
@@ -611,12 +625,12 @@ struct HCCTrainingProgressionCard: View {
 
 /// The `.btns` row for the week controls.
 ///
-/// `HCCButtonRow` is the design system's button row and is used everywhere else,
-/// but it models exactly one primary and one secondary; these controls are one
-/// to three equal-weight actions (the mockup draws "Start next cycle" and "Skip
-/// deload" as two plain buttons side by side). Rather than promote an arbitrary
-/// one to accent-filled, this lays out the same button the mockup's `.btns
-/// button` rule describes, two to a row.
+/// These controls are one to three EQUAL-weight actions, which is why they use
+/// `HCCButtonRow`'s `.utility` style: in that style the row's two slots render
+/// identically (`control` fill, radius 12, uppercase 11 pt), so nothing here
+/// promotes an arbitrary control to the accent CTA. The slots are filled
+/// secondary-first because that is the order `HCCButtonRow` lays them out in,
+/// which keeps `weekControls`' order on screen.
 struct HCCTrainingButtons: View {
   let specs: [HCCButtonSpec]
 
@@ -630,11 +644,11 @@ struct HCCTrainingButtons: View {
     // `.btns button{flex:1}` does with a single child.
     VStack(spacing: 8) {
       ForEach(Self.rows(for: specs.count), id: \.self) { row in
-        HStack(spacing: 8) {
-          ForEach(row, id: \.self) { index in
-            button(specs[index])
-          }
-        }
+        HCCButtonRow(
+          primary: row.count > 1 ? specs[row[1]] : nil,
+          secondary: specs[row[0]],
+          style: .utility
+        )
       }
     }
     .padding(.top, 4)
@@ -650,28 +664,5 @@ struct HCCTrainingButtons: View {
     }
     return out
   }
-
-  private func button(_ spec: HCCButtonSpec) -> some View {
-    Button(action: spec.action) {
-      Text(spec.title)
-        .font(HCCTheme.Font.body(size: 11, weight: .semibold))
-        .tracking(0.88)
-        .textCase(.uppercase)
-        .multilineTextAlignment(.center)
-        .foregroundStyle(HCCTheme.Color.text)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 11)
-        .padding(.horizontal, 8)
-        .background(
-          RoundedRectangle(cornerRadius: 10, style: .continuous).fill(HCCTheme.Color.card2)
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .strokeBorder(HCCTheme.Color.line, lineWidth: 1)
-        )
-    }
-    .buttonStyle(.plain)
-    .disabled(!spec.isEnabled)
-    .opacity(spec.isEnabled ? 1 : 0.45)
-  }
 }
+

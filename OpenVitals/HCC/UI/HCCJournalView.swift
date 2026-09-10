@@ -107,13 +107,19 @@ private struct HCCJournalScreen: View {
     dayKey = key
   }
 
+  /// The handoff's header: the title block on the left, the day pill in the
+  /// header's own `trailing:` slot rather than an `HStack` wrapped around the
+  /// whole header — the wrapper gave the pill the header's full height to align
+  /// against and let the title's own bottom padding drift away from it.
   private var header: some View {
-    HStack(alignment: .center, spacing: 10) {
-      HCCDetailHeader(title: "Journal", subtitle: subtitle, showsBack: false)
+    HCCDetailHeader(title: "Journal", subtitle: subtitle, showsBack: false) {
       HCCDayNav(
         label: relativeLabel,
         canGoBack: true,
         canGoForward: !isToday,
+        // 13 on the Journal, where the pill shares the row with a 26-pt title;
+        // 14 on Home, where it stands alone.
+        labelSize: 13,
         goBack: { step(days: -1) },
         goForward: { step(days: 1) }
       )
@@ -124,8 +130,8 @@ private struct HCCJournalScreen: View {
 
   private var behaviorsCard: some View {
     VStack(alignment: .leading, spacing: 0) {
-      HCCLabel("Behaviors", size: 11)
-        .padding(.bottom, 8)
+      HCCLabel("Behaviors")
+        .padding(.bottom, 6)
 
       if let day {
         let behaviors = day.visibleBehaviors
@@ -239,11 +245,11 @@ private struct HCCJournalScreen: View {
       HStack(alignment: .center) {
         // "Doses today" only when the day on screen IS today; on a back day the
         // word would be a small lie about which day is being ticked.
-        HCCLabel(isToday ? "Doses today" : "Doses", size: 11)
+        HCCLabel(isToday ? "Doses today" : "Doses")
         Spacer(minLength: 8)
         HCCChip("from active protocols")
       }
-      .padding(.bottom, 8)
+      .padding(.bottom, 6)
 
       if let day {
         if day.due.isEmpty {
@@ -254,9 +260,12 @@ private struct HCCJournalScreen: View {
           // journal/doses.ts) so this card and the web page bucket identically.
           let groups = hccGroupDosesBySlot(day.due)
           ForEach(Array(groups.enumerated()), id: \.element.slot) { groupIndex, group in
-            HCCLabel(group.slot.label, size: 10)
-              .padding(.top, groupIndex == 0 ? 0 : 12)
-              .padding(.bottom, 6)
+            // The slot heading is a step below the card's own label: 9.5 in the
+            // tertiary grey, so "Morning" reads as a divider inside the card
+            // rather than as a second card title.
+            HCCLabel(group.slot.label, size: 9.5, color: HCCTheme.Color.muted2)
+              .padding(.top, groupIndex == 0 ? 2 : 12)
+              .padding(.bottom, 4)
             ForEach(Array(group.lines.enumerated()), id: \.element.id) { index, due in
               // The divider closes each section, so the last row of a group
               // does not draw a line into the next group's heading.
@@ -275,7 +284,9 @@ private struct HCCJournalScreen: View {
           .padding(.top, 8)
       }
     }
-    .hccCard()
+    // Doses belong to the protocols, and a protocol card is strain-indigo — so
+    // this card carries that metric's wash rather than the neutral fill.
+    .hccCard(tint: HCCTheme.Color.strain)
   }
 
   private func doseRow(_ due: HCCDueDose, showsDivider: Bool) -> some View {
@@ -352,11 +363,11 @@ private struct HCCJournalScreen: View {
   private var impactsCard: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(alignment: .center) {
-        HCCLabel("Impact on recovery", size: 11)
+        HCCLabel("Impact on recovery")
         Spacer(minLength: 8)
         HCCChip("\(HealthDataStore.hccJournalImpactDays) days")
       }
-      .padding(.bottom, 8)
+      .padding(.bottom, 6)
 
       if let impacts = state.impacts {
         if impacts.impacts.isEmpty {

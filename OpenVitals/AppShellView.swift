@@ -68,27 +68,26 @@ struct AppShellView: View {
   }
 
   // HCC: the system bar is hidden per stack rather than removed, so each tab
-  // keeps its own navigation state across a switch; the custom bar is laid out
-  // under each stack (see the note inside), which is what keeps a scrolling
-  // screen's last row clear of it without a magic number.
+  // keeps its own navigation state across a switch; the custom bar and the
+  // Coach FAB are OVERLAYS on each stack, so the content scrolls beneath them.
   private var cloudShell: some View {
     TabView(selection: tabSelection) {
       ForEach(OpenVitalsAppTab.bottomTabs) { tab in
-        // The bar is laid out UNDER each tab's stack rather than as a
-        // safe-area inset: an inset on the TabView (or on the stack) never
-        // reached the ScrollViews inside the per-tab NavigationStacks, and every
-        // scrolling screen's last card ended up clamped under the bar by exactly
-        // its height. A plain VStack bounds the stack above the bar for certain.
-        VStack(spacing: 0) {
-          // HCC: the Coach FAB overlays the STACK, not the VStack, so it sits
-          // above the tab bar by construction rather than by a magic offset —
-          // the same reasoning as the bar's own layout above.
-          tabNavigationStack(for: tab)
-            .overlay(alignment: .bottomTrailing) { coachFAB }
-          HCCTabBar(selection: tabSelection, tabs: OpenVitalsAppTab.bottomTabs)
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .tag(tab)
+        // The "Tinted" direction floats the bar: it is a pill inset from the
+        // edges with content passing under it, so it CANNOT bound the scroll
+        // view the way the old `VStack` sibling did. What keeps a screen's last
+        // card clear of it is `HCCScreen`'s bottom inset
+        // (`HCCTheme.Spacing.tabBarClearance`) — the one number both the bar's
+        // geometry and every scroll view are derived from. The safe-area-inset
+        // route is still out: it never reached the ScrollViews inside these
+        // per-tab NavigationStacks (see docs/hcc-provider.md).
+        tabNavigationStack(for: tab)
+          .overlay(alignment: .bottomTrailing) { coachFAB }
+          .overlay(alignment: .bottom) {
+            HCCTabBar(selection: tabSelection, tabs: OpenVitalsAppTab.bottomTabs)
+          }
+          .toolbar(.hidden, for: .tabBar)
+          .tag(tab)
       }
     }
     .tint(HCCTheme.Color.accent)
@@ -122,9 +121,11 @@ struct AppShellView: View {
   @ViewBuilder
   private var coachFAB: some View {
     if !isCoachPresented {
+      // 16 from the right edge, 14 above the floating bar — both derived from
+      // the bar's own geometry rather than measured off a screenshot.
       HCCCoachFAB { presentCoach() }
-        .padding(.trailing, 14)
-        .padding(.bottom, 14)
+        .padding(.trailing, HCCTheme.Spacing.tabBarInset)
+        .padding(.bottom, HCCTheme.Spacing.fabBottom)
     }
   }
 

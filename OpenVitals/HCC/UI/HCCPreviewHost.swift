@@ -52,7 +52,9 @@ struct HCCComponentGallery: View {
           biomarkerDetailSection.id("biomarker")
         }
         .padding(.horizontal, 16)
-        .padding(.bottom, 32)
+        // The tab bar floats over the content now, so the gallery leaves the
+        // same clearance a real screen does.
+        .padding(.bottom, HCCTheme.Spacing.tabBarClearance)
       }
       .onAppear {
         guard let anchor = Self.requestedAnchor else { return }
@@ -115,11 +117,13 @@ struct HCCComponentGallery: View {
   private var header: some View {
     VStack(alignment: .leading, spacing: 4) {
       Text("Command components")
-        .font(HCCTheme.Font.display(size: 20, weight: .medium))
-        .tracking(-0.4)
+        .font(HCCTheme.Font.display(size: 26, weight: .semibold))
+        .tracking(-0.6)
         .foregroundStyle(HCCTheme.Color.text)
       Text("Sample props · not connected to any instance")
-        .font(HCCTheme.Font.body(size: 11.5))
+        .font(HCCTheme.Font.data(size: 10.5))
+        .tracking(0.5)
+        .textCase(.uppercase)
         .foregroundStyle(HCCTheme.Color.muted)
     }
     .padding(.top, 14)
@@ -130,25 +134,35 @@ struct HCCComponentGallery: View {
     VStack(alignment: .leading, spacing: 0) {
       HCCSectionHeader(title: "Rings")
 
-      // The Home row: three 94-pt rings, 7-pt stroke, no ticks.
+      // The Home row: three 100-pt rings, 10-pt stroke, no ticks, each under
+      // its own metric chip and staggered 0.1 s apart.
       HStack(spacing: 8) {
         HCCRingWrap(
           title: "Sleep",
-          ring: HCCRing(progress: 0.81, kind: .sleep, size: 94, stroke: 7, value: "81", unit: "%")
+          ring: HCCRing(
+            progress: 0.72, kind: .sleep, size: 100, stroke: 10,
+            value: "72", unit: "%", animationDelay: 0
+          ),
+          tint: HCCTheme.Color.sleep,
+          tintText: HCCTheme.Color.sleepText
         )
         HCCRingWrap(
           title: "Recovery",
           ring: HCCRing(
-            progress: 0.70, kind: .rec, size: 94, stroke: 7,
-            value: "70", unit: "%", band: .band(for: 70)
-          )
+            progress: 0.69, kind: .rec, size: 100, stroke: 10,
+            value: "69", unit: "%", band: .band(for: 69), animationDelay: 0.1
+          ),
+          tint: HCCTheme.Color.recovery,
+          tintText: HCCTheme.Color.recoveryText
         )
         HCCRingWrap(
           title: "Strain",
           ring: HCCRing(
-            progress: 12.4 / 21, kind: .strain, size: 94, stroke: 7,
-            value: "12.4", target: 13.5 / 21
-          )
+            progress: 11.4 / 21, kind: .strain, size: 100, stroke: 10,
+            value: "11.4", target: 14.9 / 21, animationDelay: 0.2
+          ),
+          tint: HCCTheme.Color.strain,
+          tintText: HCCTheme.Color.strainText
         )
       }
 
@@ -230,18 +244,73 @@ struct HCCComponentGallery: View {
           HCCChip("recovery", dotColor: HCCTheme.Color.rec)
           HCCChip("moderate", dotColor: HCCTheme.Color.strain)
         }
-        HStack(spacing: 8) {
-          HCCPill("Primed", tone: .good)
-          HCCPill("Watch", tone: .warn)
-          HCCPill("Rest", tone: .bad)
-          HCCPill("Archived", tone: .muted)
-          HCCPill("Planned", tone: .accent)
+        HCCFlowRow(spacing: 8, lineSpacing: 8) {
+          HCCPill("ACTIVE", tone: .good)
+          HCCPill("watch", tone: .warn)
+          HCCPill("alert", tone: .bad)
+          HCCPill("COMPLETED", tone: .muted)
+          HCCPill("heterozygous CT", tone: .info)
+          HCCPill("PLANNED", tone: .accent)
         }
         HCCLabel("Small caps label")
+        HCCSectionLink(title: "Biomarkers") {}
         HCCEmptyNote("No open insights. New ones appear as syncs land.")
       }
       .hccCard()
+
+      // The metric tints, which are what the direction is named after: a card
+      // that belongs to one metric carries that metric's colour.
+      VStack(alignment: .leading, spacing: 8) {
+        tintedCardSample("Sleep tint", tint: HCCTheme.Color.sleep, text: HCCTheme.Color.sleepText)
+        tintedCardSample("Recovery tint", tint: HCCTheme.Color.recovery, text: HCCTheme.Color.recoveryText)
+        tintedCardSample("Strain tint", tint: HCCTheme.Color.strain, text: HCCTheme.Color.strainText)
+        tintedCardSample("Good tint · 0.08 → 0.02", tint: HCCTheme.Color.good, text: HCCTheme.Color.goodText, top: 0.08, bottom: 0.02)
+
+        // The one card in the design with a border.
+        VStack(alignment: .leading, spacing: 6) {
+          HStack(spacing: 8) {
+            Text("Recovery 69%")
+              .font(HCCTheme.Font.display(size: 16, weight: .semibold))
+              .tracking(-0.2)
+              .foregroundStyle(HCCTheme.Color.text)
+            HCCPill("hcc_recovery", color: HCCTheme.Color.recovery)
+          }
+          Text("The insight card: the cyan/violet gradient plus a 1-px border, the only bordered card in the design.")
+            .font(HCCTheme.Font.body(size: 14))
+            .lineSpacing(4)
+            .foregroundStyle(HCCTheme.Color.textBody)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .hccCard(
+          fill: HCCTheme.Color.insightGradient,
+          border: HCCTheme.Color.recovery.opacity(0.14),
+          padding: EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
+        )
+      }
+      .padding(.top, 8)
     }
+  }
+
+  private func tintedCardSample(
+    _ title: String,
+    tint: Color,
+    text: Color,
+    top: Double = 0.15,
+    bottom: Double = 0.035
+  ) -> some View {
+    HStack {
+      Text(title)
+        .font(HCCTheme.Font.display(size: 15, weight: .semibold))
+        .tracking(-0.2)
+        .foregroundStyle(HCCTheme.Color.text)
+      Spacer(minLength: 8)
+      Text("SAMPLE")
+        .hccLabelStyle(size: 10, color: text)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(tint.opacity(0.18)))
+    }
+    .hccCard(tint: tint, tintTop: top, tintBottom: bottom)
   }
 
   /// A week shaped to stress the chart's edges, not to look tidy.
@@ -334,9 +403,11 @@ struct HCCComponentGallery: View {
       VStack(alignment: .leading, spacing: 0) {
         HCCLabel("Menu rows")
           .padding(.bottom, 4)
+        // A navigating row gets the chevron; a row with no action does not.
         HCCMenuRow(title: "Server", detail: "localhost:3999") {}
-        HCCMenuRow(title: "Time zone", detail: "America/Bogota") {}
-        HCCMenuRow(title: "Sign out", showsDivider: false) {}
+        HCCMenuRow(title: "Account", detail: "you@example.com", detailColor: HCCTheme.Color.recoveryText) {}
+        HCCMenuRow(title: "Time zone", detail: "America/Bogota")
+        HCCMenuRow(title: "Sign out", showsDivider: false, showsChevron: false) {}
       }
       .hccCard()
     }
@@ -371,17 +442,48 @@ struct HCCComponentGallery: View {
       VStack(alignment: .leading, spacing: 0) {
         HCCCheckRow(title: "Recovery graph", isOn: $checkOn, meta: "graph")
         HCCCheckRow(title: "Resting heart rate", isOn: $checkOff, meta: "metric", showsDivider: false)
+        // The Training set row's smaller box, next to the dose row's, so the
+        // pair can be compared rather than eyeballed one at a time.
+        HStack(spacing: 12) {
+          HCCCheckbox(isOn: true)
+          HCCCheckbox(isOn: false)
+          HCCCheckbox(isOn: true, size: 20, radius: 6)
+          HCCCheckbox(isOn: false, size: 20, radius: 6)
+          Spacer(minLength: 0)
+        }
+        .padding(.top, 10)
       }
       .hccCard()
 
-      HCCButtonRow(
-        primary: HCCButtonSpec(title: "◉ Start activity") { comingSoon = true },
-        secondary: HCCButtonSpec(title: "＋ Add activity") {}
-      )
-      HCCButtonRow(
-        primary: HCCButtonSpec(title: "Disabled primary", isEnabled: false) {},
-        secondary: HCCButtonSpec(title: "Coming soon sheet") { comingSoon = true }
-      )
+      VStack(alignment: .leading, spacing: 8) {
+        HCCButtonRow(
+          primary: HCCButtonSpec(title: "Start activity", systemImage: "play.fill") { comingSoon = true },
+          secondary: HCCButtonSpec(title: "Add", systemImage: "plus") {}
+        )
+        HCCButtonRow(
+          primary: HCCButtonSpec(title: "Disabled primary", isEnabled: false) {},
+          secondary: HCCButtonSpec(title: "Coming soon sheet") { comingSoon = true }
+        )
+        // The Training control row.
+        HCCButtonRow(
+          primary: HCCButtonSpec(title: "Deload") {},
+          secondary: HCCButtonSpec(title: "Advance week") {},
+          style: .utility
+        )
+      }
+      .padding(.top, 10)
+
+      // The header, with the trailing slot Journal fills with its day nav.
+      VStack(alignment: .leading, spacing: 12) {
+        HCCDetailHeader(title: "Journal", subtitle: "Today · Tue, Sep 9", showsBack: false) {
+          HCCDayNav(
+            label: "Today", canGoBack: true, canGoForward: false, labelSize: 13,
+            goBack: {}, goForward: {}
+          )
+        }
+        HCCDetailHeader(title: "Biomarkers", subtitle: "Last panel Aug 22 · graded vs optimal targets", size: 24)
+      }
+      .padding(.top, 16)
     }
   }
 

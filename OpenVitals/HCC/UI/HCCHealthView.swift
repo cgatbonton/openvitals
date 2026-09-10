@@ -138,7 +138,14 @@ struct HCCHealthLanding: View {
 
   var body: some View {
     HCCScreen {
-      HCCDetailHeader(title: "Health", showsBack: false)
+      // The subtitle names the four cards below it, in their order — the mock's
+      // `BIOMARKERS · INSIGHTS · GENETICS · PROTOCOLS`. `HCCDetailHeader`
+      // uppercases it and sets it in Plex Mono itself.
+      HCCDetailHeader(
+        title: "Health",
+        subtitle: "Biomarkers · Insights · Genetics · Protocols",
+        showsBack: false
+      )
       grid
       keyVitals
       monitor
@@ -174,10 +181,41 @@ struct HCCHealthLanding: View {
 
   private var grid: some View {
     LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-      HealthCard(page: .biomarkers, icon: "🧪", title: "Biomarkers", subtitle: biomarkersSubtitle)
-      HealthCard(page: .insights, icon: "✦", title: "Insights", subtitle: insightsSubtitle)
-      HealthCard(page: .genetics, icon: "🧬", title: "Genetics", subtitle: geneticsSubtitle)
-      HealthCard(page: .protocols, icon: "◈", title: "Protocols", subtitle: protocolsSubtitle)
+      // The handoff's tint per page: Biomarkers sleep-blue, Insights
+      // recovery-cyan, Genetics good-green, Protocols strain-indigo.
+      HealthCard(
+        page: .biomarkers,
+        symbol: "testtube.2",
+        tint: HCCTheme.Color.sleep,
+        tintText: HCCTheme.Color.sleepText,
+        title: "Biomarkers",
+        subtitle: biomarkersSubtitle
+      )
+      HealthCard(
+        page: .insights,
+        symbol: "sparkles",
+        tint: HCCTheme.Color.recovery,
+        tintText: HCCTheme.Color.recoveryText,
+        title: "Insights",
+        subtitle: insightsSubtitle
+      )
+      // iOS 26 ships no `dna` symbol, so the handoff's fallback stands.
+      HealthCard(
+        page: .genetics,
+        symbol: "waveform.path.ecg",
+        tint: HCCTheme.Color.good,
+        tintText: HCCTheme.Color.goodText,
+        title: "Genetics",
+        subtitle: geneticsSubtitle
+      )
+      HealthCard(
+        page: .protocols,
+        symbol: "shippingbox",
+        tint: HCCTheme.Color.strain,
+        tintText: HCCTheme.Color.strainText,
+        title: "Protocols",
+        subtitle: protocolsSubtitle
+      )
     }
   }
 
@@ -235,18 +273,24 @@ struct HCCHealthLanding: View {
   /// instead of reusing `HCCSectionLink`, which pushes nothing.
   private func cardTitle(_ title: String, link: String, page: Page) -> some View {
     HStack(alignment: .firstTextBaseline) {
-      HCCLabel(title, size: 11)
+      HCCLabel(title, size: 10)
       Spacer(minLength: 8)
       NavigationLink(value: page) {
-        HCCLabel(link, size: 10, color: HCCTheme.Color.accent)
+        // `HCCSectionLink`'s rendering; a `NavigationLink` rather than that
+        // component because this one pushes a page instead of running a closure.
+        HCCLabel(link, size: 10, color: HCCTheme.Color.accentText)
       }
       .buttonStyle(.plain)
     }
   }
 
   private var keyVitals: some View {
-    VStack(alignment: .leading, spacing: 6) {
+    // Rows inside a card are flush and separated by `HCCDivider`, so the stack
+    // is `spacing: 0` and the mock's own gaps are carried by the label and the
+    // footnote. See "Card Spacing Is Stack Spacing".
+    VStack(alignment: .leading, spacing: 0) {
       cardTitle("Key vitals", link: "Biomarkers", page: .biomarkers)
+        .padding(.bottom, 4)
       if let vitals = home?.vitals {
         if vitals.isEmpty {
           HCCEmptyNote("No biomarkers on record yet.")
@@ -274,8 +318,9 @@ struct HCCHealthLanding: View {
   }
 
   private var activeInsights: some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: 0) {
       cardTitle("Active insights", link: "Insights", page: .insights)
+        .padding(.bottom, 4)
       if let flags = home?.flags {
         if flags.isEmpty {
           HCCEmptyNote("Nothing flagged.")
@@ -308,8 +353,9 @@ struct HCCHealthLanding: View {
   }
 
   private var monitor: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HCCLabel("Health monitor", size: 11)
+    VStack(alignment: .leading, spacing: 0) {
+      HCCLabel("Health monitor", size: 10)
+        .padding(.bottom, 2)
       if monitorSeries.isEmpty {
         HCCEmptyNote("No wearable vitals on record yet.")
       } else {
@@ -349,35 +395,51 @@ struct HCCHealthLanding: View {
 /// `.hcard` — icon, title, and a data-font line at the bottom.
 private struct HealthCard: View {
   let page: HCCHealthView.Page
-  let icon: String
+  /// The SF Symbol in the icon tile. The mockup's line-art is a placeholder;
+  /// the handoff names the symbol.
+  let symbol: String
+  /// The metric this card belongs to — its tint fills the card and, at 18 %,
+  /// the icon tile.
+  let tint: Color
+  /// That metric's LIGHT tint, which the glyph is drawn in.
+  let tintText: Color
   let title: String
   let subtitle: String
 
   var body: some View {
     NavigationLink(value: page) {
       VStack(alignment: .leading, spacing: 8) {
-        Text(icon)
+        Image(systemName: symbol)
           .font(.system(size: 18))
+          .foregroundStyle(tintText)
+          .frame(width: 32, height: 32)
+          .background(
+            RoundedRectangle(cornerRadius: HCCTheme.Radius.small, style: .continuous)
+              .fill(tint.opacity(0.18))
+          )
         Text(title)
-          .font(HCCTheme.Font.display(size: 16, weight: .medium))
-          .tracking(-0.16)
+          .font(HCCTheme.Font.display(size: 16, weight: .semibold))
+          .tracking(-0.2)
           .foregroundStyle(HCCTheme.Color.text)
+        // Pins the subtitle to the bottom of the tile (the mock's
+        // `margin-top:auto`), whatever height the title wrapped to.
         Spacer(minLength: 4)
         Text(subtitle)
-          .font(HCCTheme.Font.data(size: 11))
+          .font(HCCTheme.Font.data(size: 10.5))
           .foregroundStyle(HCCTheme.Color.muted)
-          .lineSpacing(2)
+          // Target 15-pt line at 10.5 pt.
+          .lineSpacing(2.4)
           .fixedSize(horizontal: false, vertical: true)
       }
-      .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-      .padding(14)
-      .background(
-        RoundedRectangle(cornerRadius: HCCTheme.Radius.card, style: .continuous)
-          .fill(HCCTheme.Color.card)
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: HCCTheme.Radius.card, style: .continuous)
-          .strokeBorder(HCCTheme.Color.line, lineWidth: 1)
+      // The mock's 96-pt minimum is on the PADDED tile, so the content floor is
+      // 96 minus the card's 14 + 14.
+      .frame(maxWidth: .infinity, minHeight: 68, alignment: .topLeading)
+      .hccCard(
+        tint: tint,
+        tintTop: 0.15,
+        tintBottom: 0.035,
+        radius: HCCTheme.Radius.tile,
+        padding: EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)
       )
     }
     .buttonStyle(.plain)
@@ -398,11 +460,11 @@ private struct MonitorRow: View {
           .foregroundStyle(HCCTheme.Color.text)
         Spacer(minLength: 8)
         Text(valueText)
-          .font(HCCTheme.Font.data(size: 12.5))
+          .font(HCCTheme.Font.display(size: 13, weight: .semibold))
           .monospacedDigit()
           .foregroundStyle(HCCTheme.Color.text)
       }
-      .padding(.top, 6)
+      .padding(.top, 8)
 
       if let placement {
         HCCBand(position: placement)
@@ -477,7 +539,7 @@ private struct KeyVitalRow: View {
       HCCStatusDot(status: metric.status, size: 8)
 
       Text(metric.displayName)
-        .font(HCCTheme.Font.body(size: 12.5))
+        .font(HCCTheme.Font.body(size: 13))
         .foregroundStyle(HCCTheme.Color.text)
         .lineLimit(2)
 
@@ -485,7 +547,8 @@ private struct KeyVitalRow: View {
 
       HStack(alignment: .firstTextBaseline, spacing: 3) {
         Text(metric.value.map { HCCFormat.decimal($0, abs($0) >= 100 ? 0 : 1) } ?? HCCFormat.placeholder)
-          .font(HCCTheme.Font.data(size: 12.5))
+          .font(HCCTheme.Font.display(size: 15, weight: .semibold))
+          .tracking(-0.3)
           .monospacedDigit()
           .foregroundStyle(HCCTheme.Color.text)
         if let unit = metric.unit, !unit.isEmpty, metric.value != nil {
@@ -498,13 +561,13 @@ private struct KeyVitalRow: View {
       Text(metric.ageText)
         .font(HCCTheme.Font.data(size: 10))
         .foregroundStyle(HCCTheme.Color.muted)
-        .frame(minWidth: 56, alignment: .trailing)
+        .frame(minWidth: 52, alignment: .trailing)
 
-      Text("\u{203A}")
-        .font(HCCTheme.Font.body(size: 13))
-        .foregroundStyle(HCCTheme.Color.muted)
+      Image(systemName: "chevron.right")
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(HCCTheme.Color.chevron)
     }
-    .padding(.vertical, 7)
+    .padding(.vertical, 9)
     // The gaps between name, value and age are the widest part of the row; a
     // tap landing in one must still open the card.
     .contentShape(Rectangle())
@@ -538,12 +601,13 @@ private struct ActiveFlagRow: View {
 
       VStack(alignment: .leading, spacing: 3) {
         Text(flag.title)
-          .font(HCCTheme.Font.body(size: 12.5, weight: .medium))
+          .font(HCCTheme.Font.body(size: 13, weight: .medium))
           .foregroundStyle(HCCTheme.Color.text)
           .fixedSize(horizontal: false, vertical: true)
         Text(flag.summary)
           .font(HCCTheme.Font.body(size: 11.5))
-          .lineSpacing(2.5)
+          // Target 16-pt line at 11.5 pt.
+          .lineSpacing(2.2)
           .foregroundStyle(HCCTheme.Color.muted)
           .lineLimit(2)
       }
@@ -551,13 +615,8 @@ private struct ActiveFlagRow: View {
       Spacer(minLength: 8)
 
       HCCPill(flag.severity, tone: .severity(flag.severity))
-
-      Text("\u{203A}")
-        .font(HCCTheme.Font.body(size: 13))
-        .foregroundStyle(HCCTheme.Color.muted)
-        .padding(.top, 2)
     }
-    .padding(.vertical, 8)
+    .padding(.vertical, 10)
     // The cropped summary leaves a lot of empty row; all of it opens the card.
     .contentShape(Rectangle())
     .accessibilityElement(children: .combine)

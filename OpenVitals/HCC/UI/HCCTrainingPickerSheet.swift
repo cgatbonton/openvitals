@@ -66,11 +66,10 @@ struct HCCTrainingPickerCard: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: 8) {
       HStack(spacing: 10) {
         HCCLabel(
-          "\(HCCTrainingFormat.shortDow(dayKey)) \(HCCTrainingFormat.dayNumber(dayKey)) · workout",
-          size: 11
+          "\(HCCTrainingFormat.shortDow(dayKey)) \(HCCTrainingFormat.dayNumber(dayKey)) · workout"
         )
         Spacer(minLength: 8)
         menu
@@ -80,10 +79,14 @@ struct HCCTrainingPickerCard: View {
         HCCFootnote(sourceNote + " Strength days regenerate their sets from the training max.")
       }
     }
-    .hccCard()
-    .overlay(
-      RoundedRectangle(cornerRadius: HCCTheme.Radius.card, style: .continuous)
-        .strokeBorder(HCCTheme.Color.accent, lineWidth: 1)
+    // The one bordered card on this tab, and the border is the handoff's own:
+    // a 45 % accent hairline that marks the row as the thing that CHANGES the
+    // day rather than reports it. It goes through `hccCard(fill:border:)` so the
+    // stroke is clipped with the card instead of being painted over it.
+    .hccCard(
+      fill: HCCTheme.Color.flat(HCCTheme.Color.card),
+      border: HCCTheme.Color.accent.opacity(0.45),
+      padding: EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
     )
     .opacity(isEnabled ? 1 : 0.5)
   }
@@ -107,22 +110,19 @@ struct HCCTrainingPickerCard: View {
     } label: {
       HStack(spacing: 6) {
         Text(selectedTitle)
-          .font(HCCTheme.Font.body(size: 13.5, weight: .medium))
+          .font(HCCTheme.Font.body(size: 13, weight: .medium))
           .foregroundStyle(HCCTheme.Color.text)
           .lineLimit(1)
           .truncationMode(.tail)
         Image(systemName: "chevron.up.chevron.down")
-          .font(.system(size: 9, weight: .semibold))
+          .font(.system(size: 11, weight: .semibold))
           .foregroundStyle(HCCTheme.Color.muted)
       }
       .padding(.horizontal, 10)
       .padding(.vertical, 7)
       .background(
-        RoundedRectangle(cornerRadius: 9, style: .continuous).fill(HCCTheme.Color.card2)
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
-          .strokeBorder(HCCTheme.Color.line, lineWidth: 1)
+        RoundedRectangle(cornerRadius: HCCTheme.Radius.small, style: .continuous)
+          .fill(HCCTheme.Color.control2)
       )
       .contentShape(Rectangle())
     }

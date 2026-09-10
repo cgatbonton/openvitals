@@ -191,7 +191,7 @@ struct HCCLoadingNote: View {
   }
 }
 
-/// The muted footnote under a card — the mockup's small grey `<p>`.
+/// The footnote under a card — 11 pt on a 16-pt line, in `#6E7C9C`.
 struct HCCFootnote: View {
   let text: String
   var size: CGFloat = 11
@@ -204,7 +204,10 @@ struct HCCFootnote: View {
   var body: some View {
     Text(text)
       .font(HCCTheme.Font.body(size: size))
-      .foregroundStyle(HCCTheme.Color.muted)
+      // 16-pt line at 11 pt: SwiftUI's own line box is ~13, so the remainder is
+      // the leading.
+      .lineSpacing(3)
+      .foregroundStyle(HCCTheme.Color.muted2)
       .fixedSize(horizontal: false, vertical: true)
       .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -253,7 +256,7 @@ struct HCCErrorNote: View {
             .font(HCCTheme.Font.body(size: 11, weight: .semibold))
             .tracking(0.88)
             .textCase(.uppercase)
-            .foregroundStyle(HCCTheme.Color.accent)
+            .foregroundStyle(HCCTheme.Color.accentText)
         }
         .buttonStyle(.plain)
         .padding(.top, 4)
@@ -265,10 +268,67 @@ struct HCCErrorNote: View {
 
 // ── Screen scaffold ──────────────────────────────────────────────────────────
 
-/// The `.content` box: 12/16/18 padding, hidden indicators, the screen ground,
-/// and no system navigation bar — these screens draw their own header.
+/// The `.content` box: 12/16 padding, hidden indicators, the screen ground, and
+/// no system navigation bar — these screens draw their own header.
+///
+/// The bottom inset is the one number that matters here. The tab bar and the
+/// Coach FAB FLOAT over the content now (they are overlays on the tab's stack,
+/// not siblings in a `VStack`), so nothing bounds this scroll view above them —
+/// the last card clears the bar only because the content leaves
+/// `HCCTheme.Spacing.tabBarClearance` below itself.
+///
+/// `bottomClearance: nil` means "work it out": a screen presented as a SHEET has
+/// no floating chrome under it and takes the small sheet padding instead, so a
+/// modal does not open with 90 pt of dead space at the end. Pass a number to
+/// override either way.
+///
+/// **How "am I under the floating chrome?" is answered: geometry, not
+/// `\.isPresented`.** That environment value was the first answer here and it
+/// was WRONG — it reads true for a view PUSHED onto a `NavigationStack` exactly
+/// as it does for one presented in a sheet, so every pushed detail screen
+/// (Sleep, Recovery, Strain, Biomarkers, Insights, Genetics, Protocols) took the
+/// 18-pt sheet padding and ended with its last card under the tab bar. A pushed
+/// screen is INSIDE the shell; only a modal is outside it, and `isPresented`
+/// cannot tell those two apart.
+///
+/// What can: the TOP safe-area inset. A screen living in the shell — tab root or
+/// pushed — is full height and owns the status bar, so its top inset is the
+/// device's (47/59 pt here). An iPhone sheet or form sheet starts below the
+/// status bar, so its top inset is 0. Reading it costs one `GeometryReader` in a
+/// `.background`, which is sized to this view and therefore changes no layout.
+///
+/// The alternative — a custom `EnvironmentKey` the shell sets on each tab's
+/// stack — was rejected on two counts. SwiftUI propagates the environment INTO
+/// `.sheet`/`.fullScreenCover` content from the presenter, so it would need an
+/// explicit reset at all 17 `.sheet(`/`.fullScreenCover(` sites under
+/// `OpenVitals/HCC` (ten files, most owned by other workstreams), and every
+/// future sheet would have to remember the same reset — a rule enforced by
+/// discipline rather than by the code. The geometry signal is self-contained in
+/// this one file and correct for a sheet nobody has written yet.
+///
+/// A full-screen COVER reads as "in the shell" (it is full height) and so takes
+/// 90. That is deliberate rather than exact: `HCCHealthView` reaches the
+/// notification destinations with a cover *because* they are shell screens, and
+/// nothing distinguishes a cover from a push from inside the covered view
+/// anyway.
 struct HCCScreen<Content: View>: View {
+  var bottomClearance: CGFloat?
   @ViewBuilder let content: () -> Content
+
+  init(bottomClearance: CGFloat? = nil, @ViewBuilder content: @escaping () -> Content) {
+    self.bottomClearance = bottomClearance
+    self.content = content
+  }
+
+  /// Starts true: the shell is the common case (four tab roots plus every
+  /// pushed detail), and a sheet corrects it on its first layout pass, before
+  /// anything below the fold has been scrolled to.
+  @State private var isUnderFloatingChrome = true
+
+  private var resolvedBottom: CGFloat {
+    if let bottomClearance { return bottomClearance }
+    return isUnderFloatingChrome ? HCCTheme.Spacing.tabBarClearance : HCCTheme.Spacing.sheetBottom
+  }
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -283,7 +343,7 @@ struct HCCScreen<Content: View>: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
-        .padding(.bottom, 18)
+        .padding(.bottom, resolvedBottom)
         // DEBUG: `HCC_DEBUG_SCROLL_BOTTOM=1` scrolls every HCCScreen to its end a
         // few seconds after it appears, so a screenshot can prove the last card
         // clears the tab bar. The marker is a zero-height view; it costs nothing
@@ -300,6 +360,17 @@ struct HCCScreen<Content: View>: View {
       #endif
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // The floating-chrome probe. `Color.clear` in a background reads this
+    // view's own geometry without occupying space or affecting its size, and
+    // `.task(id:)` re-answers if the inset changes under us (rotation, a sheet
+    // resized to a taller detent).
+    .background {
+      GeometryReader { geometry in
+        Color.clear.task(id: geometry.safeAreaInsets.top) {
+          isUnderFloatingChrome = geometry.safeAreaInsets.top > 0
+        }
+      }
+    }
     .hccBackground()
     .navigationBarBackButtonHidden(true)
     .toolbar(.hidden, for: .navigationBar)

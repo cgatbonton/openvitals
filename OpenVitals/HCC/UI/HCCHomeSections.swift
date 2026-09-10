@@ -10,23 +10,44 @@ import SwiftUI
 
 // ── Top bar ──────────────────────────────────────────────────────────────────
 
-/// `.daynav` — `‹ TODAY ›`. Forward is disabled on today, because there is no
+/// `.daynav` — `‹ Today ›`. Forward is disabled on today, because there is no
 /// day after it to read.
+///
+/// The handoff's shape: a 12-pt rounded pill on the control fill, 3 pt of
+/// padding around 30×30 arrow slots, with the day itself in Outfit 600. Not
+/// uppercase and not letter-spaced any more — it is a display label now, the
+/// same face as the screen title above it. `labelSize` is the handoff's two
+/// scales: 14 on Home, 13 in the Journal header.
 struct HCCDayNav: View {
   let label: String
   let canGoBack: Bool
   let canGoForward: Bool
+  var labelSize: CGFloat = 14
   let goBack: () -> Void
   let goForward: () -> Void
+
+  init(
+    label: String,
+    canGoBack: Bool,
+    canGoForward: Bool,
+    labelSize: CGFloat = 14,
+    goBack: @escaping () -> Void,
+    goForward: @escaping () -> Void
+  ) {
+    self.label = label
+    self.canGoBack = canGoBack
+    self.canGoForward = canGoForward
+    self.labelSize = labelSize
+    self.goBack = goBack
+    self.goForward = goForward
+  }
 
   var body: some View {
     HStack(spacing: 0) {
       arrow("chevron.left", enabled: canGoBack, action: goBack)
         .accessibilityLabel("Previous day")
       Text(label)
-        .font(HCCTheme.Font.body(size: 11, weight: .semibold))
-        .tracking(1.32)
-        .textCase(.uppercase)
+        .font(HCCTheme.Font.display(size: labelSize, weight: .semibold))
         .foregroundStyle(HCCTheme.Color.text)
         .frame(minWidth: 74)
         .padding(.horizontal, 10)
@@ -35,8 +56,10 @@ struct HCCDayNav: View {
         .accessibilityLabel("Next day")
     }
     .padding(3)
-    .background(Capsule().fill(HCCTheme.Color.card))
-    .overlay(Capsule().strokeBorder(HCCTheme.Color.line, lineWidth: 1))
+    .background(
+      RoundedRectangle(cornerRadius: HCCTheme.Radius.control, style: .continuous)
+        .fill(HCCTheme.Color.control)
+    )
     .accessibilityElement(children: .contain)
     .accessibilityValue(label)
   }
@@ -44,9 +67,9 @@ struct HCCDayNav: View {
   private func arrow(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Image(systemName: symbol)
-        .font(.system(size: 12, weight: .semibold))
+        .font(.system(size: 14, weight: .semibold))
         .foregroundStyle(HCCTheme.Color.text)
-        .frame(width: 28, height: 26)
+        .frame(width: 30, height: 30)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -96,12 +119,12 @@ struct HCCSyncButton: View {
   var body: some View {
     Button(action: action) {
       ZStack {
-        Circle().fill(HCCTheme.Color.card)
-        Circle().strokeBorder(HCCTheme.Color.line, lineWidth: 1)
+        RoundedRectangle(cornerRadius: HCCTheme.Radius.control, style: .continuous)
+          .fill(HCCTheme.Color.control)
         icon
       }
-      .frame(width: 32, height: 32)
-      .contentShape(Circle())
+      .frame(width: 36, height: 36)
+      .contentShape(RoundedRectangle(cornerRadius: HCCTheme.Radius.control, style: .continuous))
     }
     .buttonStyle(.plain)
     .disabled(isRunning)
@@ -119,7 +142,7 @@ struct HCCSyncButton: View {
         .tint(HCCTheme.Color.muted)
     } else {
       Image(systemName: symbol)
-        .font(.system(size: 13, weight: .semibold))
+        .font(.system(size: 14, weight: .semibold))
         .foregroundStyle(tint)
     }
   }
@@ -166,28 +189,28 @@ struct HCCDevicePill: View {
   let action: () -> Void
 
   var body: some View {
+    // No background any more: the handoff puts the wearable's state on the
+    // background itself — a 7-pt dot, the name in the state's own colour, and
+    // the battery glyph. The dot's colour is the caller's (it is the connection
+    // state), and the text now follows it so the two cannot disagree.
     Button(action: action) {
       HStack(spacing: 6) {
-        Circle().fill(stateColor).frame(width: 8, height: 8)
+        Circle().fill(stateColor).frame(width: 7, height: 7)
         if let batteryPercent {
           Text("\(Int(batteryPercent.rounded()))%")
             .font(HCCTheme.Font.data(size: 11, weight: .medium))
-            .foregroundStyle(HCCTheme.Color.text)
+            .foregroundStyle(stateColor)
           HCCBatteryGlyph(fill: batteryPercent / 100)
         } else {
           Text(label ?? "No device")
             .font(HCCTheme.Font.data(size: 11, weight: .medium))
-            .foregroundStyle(HCCTheme.Color.muted)
+            .foregroundStyle(stateColor)
             .lineLimit(1)
           HCCBatteryGlyph(fill: nil)
         }
       }
-      .padding(.leading, 10)
-      .padding(.trailing, 8)
-      .padding(.vertical, 5)
-      .background(Capsule().fill(HCCTheme.Color.card))
-      .overlay(Capsule().strokeBorder(HCCTheme.Color.line, lineWidth: 1))
-      .contentShape(Capsule())
+      .padding(.vertical, 8)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Device")
@@ -230,6 +253,72 @@ struct HCCBatteryGlyph: View {
   }
 }
 
+// ── Numerals ─────────────────────────────────────────────────────────────────
+
+/// A number with its unit letters typeset smaller, from ONE already-formatted
+/// string: "10:28 PM", "8h 07m", "52 bpm", "--".
+///
+/// The handoff prints the unit at a smaller size in a lighter colour, but this
+/// screen only ever holds the finished string `HCCHomeView`'s formatting
+/// helpers produced — the store does not hand the unit back separately. So the
+/// split is made on the glyphs (letters and `%` are unit, everything else is
+/// number) rather than by re-deriving a unit here, which would be a second
+/// place a value could be invented. `--` carries no letters and stays `--`.
+private struct HCCUnitNumeral: View {
+  let text: String
+  var size: CGFloat
+  var tracking: CGFloat
+  var color: Color = HCCTheme.Color.text
+  var unitSize: CGFloat
+  var unitColor: Color
+
+  var body: some View {
+    Text(styled)
+      .tracking(tracking)
+      .lineLimit(1)
+      .minimumScaleFactor(0.6)
+  }
+
+  /// One `Text` with two runs of type in it, rather than two concatenated: a
+  /// single line box, so the unit sits on the numeral's own baseline and the
+  /// whole thing scales as one when the column is narrow.
+  private var styled: AttributedString {
+    var line = AttributedString()
+    for segment in Self.segments(of: text) {
+      var run = AttributedString(segment.text)
+      if segment.isUnit {
+        run.font = HCCTheme.Font.body(size: unitSize, weight: .semibold)
+        run.foregroundColor = unitColor
+      } else {
+        run.font = HCCTheme.Font.display(size: size, weight: .semibold).monospacedDigit()
+        run.foregroundColor = color
+      }
+      line.append(run)
+    }
+    return line
+  }
+
+  struct Segment {
+    var text: String
+    var isUnit: Bool
+  }
+
+  /// Runs of "this is the number" and "this is the unit", in order.
+  static func segments(of text: String) -> [Segment] {
+    var runs: [Segment] = []
+    for character in text {
+      let isUnit = character.isLetter || character == "%"
+      if var last = runs.last, last.isUnit == isUnit {
+        last.text.append(character)
+        runs[runs.count - 1] = last
+      } else {
+        runs.append(Segment(text: String(character), isUnit: isUnit))
+      }
+    }
+    return runs
+  }
+}
+
 // ── Insight ──────────────────────────────────────────────────────────────────
 
 /// `.ins` — the first open card, with the dismiss button and the remaining
@@ -246,26 +335,36 @@ struct HCCInsightCardView: View {
   let dismiss: () -> Void
 
   var body: some View {
-    HStack(alignment: .top, spacing: 10) {
-      VStack(alignment: .leading, spacing: 0) {
-        Text(title)
-          .font(HCCTheme.Font.display(size: 15, weight: .medium))
-          .tracking(-0.15)
-          .foregroundStyle(HCCTheme.Color.text)
-          .padding(.bottom, 4)
-        Text(message)
-          .font(HCCTheme.Font.body(size: 12.5))
-          .lineSpacing(3.6)
-          .foregroundStyle(HCCTheme.Color.text)
-          .fixedSize(horizontal: false, vertical: true)
-        if let source {
-          Text(source)
-            .font(HCCTheme.Font.data(size: 10))
-            .tracking(0.4)
-            .foregroundStyle(HCCTheme.Color.muted)
-            .padding(.top, 6)
+    HStack(alignment: .top, spacing: 12) {
+      VStack(alignment: .leading, spacing: 6) {
+        // The handoff moves the source out from under the body and onto the
+        // title line, as a chip in the recovery tint. Same string, same
+        // meaning — where the card was written from.
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+          Text(title)
+            .font(HCCTheme.Font.display(size: 16, weight: .semibold))
+            .tracking(-0.2)
+            .foregroundStyle(HCCTheme.Color.text)
             .fixedSize(horizontal: false, vertical: true)
+          if let source {
+            Text(source)
+              .font(HCCTheme.Font.data(size: 9.5))
+              .tracking(0.4)
+              .lineLimit(1)
+              .foregroundStyle(HCCTheme.Color.recoveryText)
+              .padding(.horizontal, 7)
+              .padding(.vertical, 2)
+              .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                  .fill(HCCTheme.Color.recovery.opacity(0.16))
+              )
+          }
         }
+        Text(message)
+          .font(HCCTheme.Font.body(size: 14))
+          .lineSpacing(3.6)
+          .foregroundStyle(HCCTheme.Color.textBody)
+          .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -277,14 +376,11 @@ struct HCCInsightCardView: View {
             .font(HCCTheme.Font.data(size: 11, weight: .medium))
         }
         .foregroundStyle(HCCTheme.Color.text)
-        .frame(width: 34)
-        .padding(.vertical, 6)
+        .frame(width: 38)
+        .padding(.vertical, 8)
         .background(
-          RoundedRectangle(cornerRadius: 9, style: .continuous).fill(HCCTheme.Color.card2)
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .strokeBorder(HCCTheme.Color.line, lineWidth: 1)
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(HCCTheme.Color.white(0.08))
         )
       }
       .buttonStyle(.plain)
@@ -296,70 +392,71 @@ struct HCCInsightCardView: View {
 
 // ── Activities ───────────────────────────────────────────────────────────────
 
-/// `.actv` — one activity: a tinted badge with the sport icon and the number
-/// that matters for that kind, the sport name, the clock window, and a colour
-/// rail.
+/// `.actv` — one activity: a 40-pt icon tile in the activity's colour, the
+/// sport name over its clock window, and the number that matters for that kind.
 struct HCCActivityRow: View {
   let systemImage: String
   /// Strain for a workout, hours slept for a night. "--" where the server has
   /// no number.
   let badgeText: String
+  /// The handoff's small unit beside that number. `nil` where the screen has no
+  /// unit to print — this row will not invent one.
+  var badgeUnit: String?
   let name: String
   let startText: String
   let endText: String
-  /// Sleep blue or strain cyan; the badge fill and the rail take it.
+  /// Sleep blue or strain indigo; the icon tile and the number take it.
   let tint: Color
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 10) {
-        HStack(spacing: 5) {
-          Image(systemName: systemImage)
-            .font(.system(size: 14, weight: .regular))
+      HStack(spacing: 12) {
+        Image(systemName: systemImage)
+          .font(.system(size: 17, weight: .regular))
+          .foregroundStyle(.white)
+          .frame(width: 40, height: 40)
+          .background(
+            RoundedRectangle(cornerRadius: HCCTheme.Radius.control, style: .continuous)
+              // CSS `color-mix(in srgb, <tint> 55%, #123)` — the mock's own
+              // `badgeBg`, which is the activity colour darkened enough to
+              // carry a white glyph.
+              .fill(tint.mix(with: HCCTheme.Color.hex(0x112233), by: 0.45, in: .device))
+          )
+
+        VStack(alignment: .leading, spacing: 3) {
+          Text(name)
+            .font(HCCTheme.Font.body(size: 14, weight: .semibold))
+            .foregroundStyle(HCCTheme.Color.text)
+            .lineLimit(1)
+          Text("\(startText) – \(endText)")
+            .font(HCCTheme.Font.data(size: 10.5))
+            .foregroundStyle(HCCTheme.Color.muted)
+            .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
           Text(badgeText)
-            .font(HCCTheme.Font.data(size: 15, weight: .medium))
+            .font(HCCTheme.Font.display(size: 22, weight: .semibold))
+            .tracking(-0.5)
             .monospacedDigit()
+            .foregroundStyle(tint)
+          if let badgeUnit {
+            Text(badgeUnit)
+              .font(HCCTheme.Font.data(size: 9.5))
+              .tracking(0.6)
+              .foregroundStyle(HCCTheme.Color.muted)
+          }
         }
-        .foregroundStyle(.white)
-        .frame(width: 74, height: 44)
-        .background(
-          RoundedRectangle(cornerRadius: 9, style: .continuous)
-            // CSS `color-mix(in srgb, <tint> 55%, #123)`.
-            .fill(tint.mix(with: HCCTheme.Color.hex(0x112233), by: 0.45, in: .device))
-        )
-
-        Text(name)
-          .font(HCCTheme.Font.body(size: 12, weight: .semibold))
-          .tracking(1.2)
-          .textCase(.uppercase)
-          .foregroundStyle(HCCTheme.Color.text)
-          .lineLimit(2)
-
-        Spacer(minLength: 6)
-
-        VStack(alignment: .trailing, spacing: 2) {
-          Text(startText)
-          Text(endText)
-        }
-        .font(HCCTheme.Font.data(size: 10.5))
-        .foregroundStyle(HCCTheme.Color.muted)
         .lineLimit(1)
-
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
-          .fill(tint)
-          .frame(width: 3, height: 36)
       }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
+      .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 12))
       .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(HCCTheme.Color.card2)
+        RoundedRectangle(cornerRadius: HCCTheme.Radius.row, style: .continuous)
+          .fill(HCCTheme.Color.card2)
       )
-      .overlay(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .strokeBorder(HCCTheme.Color.line, lineWidth: 1)
-      )
-      .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+      .contentShape(RoundedRectangle(cornerRadius: HCCTheme.Radius.row, style: .continuous))
     }
     .buttonStyle(.plain)
     .accessibilityElement(children: .combine)
@@ -381,45 +478,31 @@ struct HCCTonightSleepCard: View {
   let need: String?
 
   var body: some View {
-    HStack(alignment: .top, spacing: 8) {
-      column(
-        value: bedtime,
-        lines: ["Recommended", "bedtime"],
-        color: HCCTheme.Color.muted
-      )
-      Text("— — —")
-        .font(HCCTheme.Font.body(size: 12))
-        .tracking(2)
-        .foregroundStyle(HCCTheme.Color.line)
-        .padding(.top, 8)
+    HStack(alignment: .top, spacing: 10) {
+      column(value: bedtime, caption: "Recommended bedtime")
       column(
         value: need ?? "--",
-        lines: need == nil ? ["No sleep need", "yet"] : ["Tonight's", "sleep need"],
-        color: HCCTheme.Color.muted
+        caption: need == nil ? "No sleep need yet" : "Tonight's sleep need"
       )
     }
-    .padding(.top, 6)
-    .padding(.bottom, 10)
   }
 
-  private func column(value: String, lines: [String], color: Color) -> some View {
-    VStack(spacing: 4) {
-      Text(value)
-        .font(HCCTheme.Font.display(size: 26, weight: .medium))
-        .tracking(-0.52)
-        .monospacedDigit()
-        .foregroundStyle(HCCTheme.Color.text)
+  private func column(value: String, caption: String) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HCCUnitNumeral(
+        text: value,
+        size: 28,
+        tracking: -0.8,
+        unitSize: 14,
+        unitColor: HCCTheme.Color.sleepText
+      )
+      Text(caption)
+        .font(HCCTheme.Font.body(size: 11.5))
+        .foregroundStyle(HCCTheme.Color.muted)
         .lineLimit(1)
-        .minimumScaleFactor(0.7)
-      VStack(spacing: 2) {
-        ForEach(lines, id: \.self) { line in
-          Text(line)
-            .hccLabelStyle(size: 9.5, color: color)
-        }
-      }
-      .multilineTextAlignment(.center)
+        .minimumScaleFactor(0.8)
     }
-    .frame(maxWidth: .infinity)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
@@ -458,8 +541,8 @@ enum HCCTileTrend {
   }
 }
 
-/// `.tile` — a small-caps label on the left, a big number and its reference
-/// line on the right.
+/// `.tile` — one cell of the two-column dashboard grid: its label, the number
+/// with its unit and trend, and the reference line the number is read against.
 struct HCCDashboardTileRow: View {
   let label: String
   /// "--" wherever the server has no value. Never a zero standing in for one.
@@ -468,33 +551,36 @@ struct HCCDashboardTileRow: View {
   let trend: HCCTileTrend
 
   var body: some View {
-    HStack(alignment: .center, spacing: 10) {
+    VStack(alignment: .leading, spacing: 8) {
       Text(label)
-        .font(HCCTheme.Font.body(size: 11.5, weight: .semibold))
-        .tracking(1.15)
-        .textCase(.uppercase)
-        .foregroundStyle(HCCTheme.Color.text)
-      Spacer(minLength: 8)
-      VStack(alignment: .trailing, spacing: 3) {
-        HStack(alignment: .firstTextBaseline, spacing: 3) {
-          Text(value)
-            .font(HCCTheme.Font.display(size: 24, weight: .medium))
-            .tracking(-0.48)
-            .monospacedDigit()
-            .foregroundStyle(HCCTheme.Color.text)
-          if let glyph = trend.glyph {
-            Text(glyph)
-              .font(.system(size: trend.fontSize))
-              .foregroundStyle(trend.color)
-          }
+        .font(HCCTheme.Font.body(size: 12, weight: .semibold))
+        .foregroundStyle(HCCTheme.Color.muted)
+        .lineLimit(1)
+      HStack(alignment: .firstTextBaseline, spacing: 4) {
+        HCCUnitNumeral(
+          text: value,
+          size: 26,
+          tracking: -0.7,
+          unitSize: 12,
+          unitColor: HCCTheme.Color.muted
+        )
+        if let glyph = trend.glyph {
+          Text(glyph)
+            .font(.system(size: trend.fontSize))
+            .foregroundStyle(trend.color)
         }
-        Text(sub)
-          .font(HCCTheme.Font.data(size: 10.5))
-          .foregroundStyle(HCCTheme.Color.muted)
       }
-      .lineLimit(1)
+      Text(sub)
+        .font(HCCTheme.Font.data(size: 10.5))
+        .foregroundStyle(HCCTheme.Color.muted2)
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
     }
-    .hccCard()
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .hccCard(
+      radius: HCCTheme.Radius.tile,
+      padding: EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
+    )
     .accessibilityElement(children: .combine)
   }
 }

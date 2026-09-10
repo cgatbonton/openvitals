@@ -13,7 +13,7 @@ struct HCCProtocolsView: View {
 
   var body: some View {
     HCCScreen {
-      HCCDetailHeader(title: "Protocols", subtitle: "Active · planned · archived")
+      HCCDetailHeader(title: "Protocols", subtitle: "Active · planned · archived", size: 24)
 
       if let response = load.value {
         let ordered = Self.ordered(response.protocols)
@@ -62,6 +62,25 @@ struct HCCProtocolsView: View {
 
 // ── Card ─────────────────────────────────────────────────────────────────────
 
+/// The card fill a protocol's status earns: a live one carries the good-green
+/// tint, a planned one the neutral card, and anything that has stopped the
+/// dimmer `rgba(255,255,255,.03)` — the handoff's three protocol surfaces.
+private struct ProtocolCardSurface: ViewModifier {
+  let status: String
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    switch status {
+    case "ACTIVE":
+      content.hccCard(tint: HCCTheme.Color.good, tintTop: 0.10, tintBottom: 0.03)
+    case "PLANNED":
+      content.hccCard()
+    default:
+      content.hccCard(fill: HCCTheme.Color.flat(HCCTheme.Color.white(0.03)))
+    }
+  }
+}
+
 private struct ProtocolCard: View {
   let item: HCCProtocol
 
@@ -70,13 +89,17 @@ private struct ProtocolCard: View {
       HStack(alignment: .top, spacing: 10) {
         VStack(alignment: .leading, spacing: 3) {
           Text(item.title)
-            .font(HCCTheme.Font.display(size: 15, weight: .medium))
+            .font(HCCTheme.Font.display(size: 15, weight: .semibold))
             .tracking(-0.15)
+            // Target 20-pt line at 15 pt.
+            .lineSpacing(2)
             .foregroundStyle(HCCTheme.Color.text)
             .fixedSize(horizontal: false, vertical: true)
           if let regimen {
             Text(regimen)
               .font(HCCTheme.Font.body(size: 11.5))
+              // Target 16-pt line at 11.5 pt.
+              .lineSpacing(2.2)
               .foregroundStyle(HCCTheme.Color.muted)
               .fixedSize(horizontal: false, vertical: true)
           }
@@ -88,10 +111,10 @@ private struct ProtocolCard: View {
       if let footer {
         Text(footer)
           .font(HCCTheme.Font.data(size: 10.5))
-          .foregroundStyle(HCCTheme.Color.muted)
+          .foregroundStyle(HCCTheme.Color.muted2)
       }
     }
-    .hccCard()
+    .modifier(ProtocolCardSurface(status: item.status))
   }
 
   /// "1 mg SC · daily AM" — dose, frequency and administration route, each

@@ -28,8 +28,10 @@ struct HCCHomeView: View {
     NavigationStack(path: $path) {
       ScrollViewReader { scroller in
       ScrollView {
-        // Same rule as `HCCScreen`: 10 pt between cards, set once here.
-        VStack(alignment: .leading, spacing: 10) {
+        // Home's own rhythm: the handoff puts 12 pt between Home's cards, set
+        // once here. See "Card Spacing Is Stack Spacing" — no card adds its own
+        // bottom padding to separate itself from the next one.
+        VStack(alignment: .leading, spacing: 12) {
           topBar
           // Only when the day itself did not arrive. A partial failure — the
           // benign 404 `/sleep/latest` answers with on a day with no night, say
@@ -45,7 +47,10 @@ struct HCCHomeView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
-        .padding(.bottom, 24)
+        // The tab bar and the Coach FAB FLOAT over the content now, so the last
+        // tile has to be given room to clear them. `HCCScreen` does this for
+        // every other screen; Home does not use it, so it does it here.
+        .padding(.bottom, HCCTheme.Spacing.tabBarClearance)
       }
       .onAppear { scrollToDebugAnchorIfRequested(scroller) }
       }
@@ -141,7 +146,7 @@ struct HCCHomeView: View {
       }
       syncNote
     }
-    .padding(.bottom, 2)
+    .padding(.bottom, 6)
   }
 
   private var syncButton: some View {
@@ -217,15 +222,29 @@ struct HCCHomeView: View {
 
   private var rings: some View {
     HStack(alignment: .top, spacing: 8) {
-      ringWrap(title: "Sleep", kind: .sleep, model: sleepRing)
-      ringWrap(title: "Recovery", kind: .rec, model: recoveryRing)
-      ringWrap(title: "Strain", kind: .strain, model: strainRing)
+      ringWrap(
+        title: "Sleep", kind: .sleep, model: sleepRing,
+        tint: HCCTheme.Color.sleep, tintText: HCCTheme.Color.sleepText, delay: 0
+      )
+      ringWrap(
+        title: "Recovery", kind: .rec, model: recoveryRing,
+        tint: HCCTheme.Color.recovery, tintText: HCCTheme.Color.recoveryText, delay: 0.1
+      )
+      ringWrap(
+        title: "Strain", kind: .strain, model: strainRing,
+        tint: HCCTheme.Color.strain, tintText: HCCTheme.Color.strainText, delay: 0.2
+      )
     }
-    .padding(.top, 2)
-    .padding(.bottom, 2)
   }
 
-  private func ringWrap(title: String, kind: HCCRingKind, model: RingModel) -> some View {
+  private func ringWrap(
+    title: String,
+    kind: HCCRingKind,
+    model: RingModel,
+    tint: Color,
+    tintText: Color,
+    delay: Double
+  ) -> some View {
     Button {
       guard let route = model.route else { return }
       path.append(route)
@@ -235,14 +254,17 @@ struct HCCHomeView: View {
         ring: HCCRing(
           progress: model.progress,
           kind: kind,
-          size: 94,
-          stroke: 7,
+          size: 100,
+          stroke: 10,
           value: model.value,
           unit: model.unit,
           sub: model.sub,
           target: model.target,
-          band: model.band
-        )
+          band: model.band,
+          animationDelay: delay
+        ),
+        tint: tint,
+        tintText: tintText
       )
     }
     .buttonStyle(.plain)
@@ -330,15 +352,21 @@ struct HCCHomeView: View {
           openCount: open.count,
           dismiss: { Task { await store.dismissInsight(id: card.id) } }
         )
-        .hccCard()
+        // The one card in the design that carries a border: the recovery/violet
+        // wash, hairlined in recovery at 14 %.
+        .hccCard(
+          fill: HCCTheme.Color.insightGradient,
+          border: HCCTheme.Color.recovery.opacity(0.14),
+          padding: Self.cardPadding
+        )
       } else if hasRead {
         HCCEmptyNote("No open insights for \(dayLabelInSentence). New ones appear as syncs land.")
-          .hccCard()
+          .hccCard(padding: Self.cardPadding)
       } else {
         // Empty and "not read yet" are different claims; only the first one is
         // an answer.
         HCCEmptyNote("Loading this day's insights...")
-          .hccCard()
+          .hccCard(padding: Self.cardPadding)
       }
     }
   }
@@ -357,14 +385,13 @@ struct HCCHomeView: View {
 
   private var activitiesCard: some View {
     let activities = store.hccActivities(for: dayKey)
-    return VStack(alignment: .leading, spacing: 0) {
+    return VStack(alignment: .leading, spacing: 12) {
       HStack {
-        HCCLabel(isToday ? "Today's activities" : "Activities", size: 11)
+        cardTitle(isToday ? "Today's activities" : "Activities")
         Spacer(minLength: 8)
         // A count of "not loaded yet" would be a claim; the chip waits.
         HCCChip(activities.map { "\($0.count)" } ?? "--")
       }
-      .padding(.bottom, 8)
 
       if let activities {
         if activities.isEmpty {
@@ -375,7 +402,6 @@ struct HCCHomeView: View {
               activityRow(activity)
             }
           }
-          .padding(.bottom, 4)
         }
       } else {
         HCCEmptyNote("Loading this day's activities...")
@@ -384,15 +410,36 @@ struct HCCHomeView: View {
       // Same rule as the Coach bubble: no control that does nothing.
       // `liveActivityIsAvailable` is the one line that takes the second button
       // away again if the live screen ever has to be pulled.
+      //
+      // The ◉ / ＋ that used to sit in the titles are gone: they were text
+      // stand-ins for the handoff's leading glyphs, which the buttons now draw
+      // as real SF Symbols. The words themselves are unchanged.
       HCCButtonRow(
         primary: Self.liveActivityIsAvailable
-          ? HCCButtonSpec(title: "◉ Start activity") { sheet = .live }
+          ? HCCButtonSpec(title: "Start activity", systemImage: "play.fill") { sheet = .live }
           : nil,
-        secondary: HCCButtonSpec(title: "＋ Add activity") { sheet = .addActivity }
+        secondary: HCCButtonSpec(title: "Add activity", systemImage: "plus") { sheet = .addActivity }
       )
     }
-    .hccCard()
+    .hccCard(padding: Self.cardPadding)
   }
+
+  /// A section title inside a Home card: Outfit 600 15, tracking −0.2.
+  ///
+  /// `HCCSectionHeader` is the same type at the same size, but it carries the
+  /// 4 pt of top padding that the standalone section headers need — inside a
+  /// card that would break the handoff's 16-pt padding, so the title is drawn
+  /// directly here.
+  private func cardTitle(_ title: String) -> some View {
+    Text(title)
+      .font(HCCTheme.Font.display(size: 15, weight: .semibold))
+      .tracking(-0.2)
+      .foregroundStyle(HCCTheme.Color.text)
+  }
+
+  /// The handoff's Home card padding: 16 all round (the other screens use
+  /// 14 × 16).
+  static let cardPadding = EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
 
   private func activityRow(_ activity: HCCActivity) -> some View {
     let isSleep = activity.kind == "SLEEP"
@@ -426,18 +473,27 @@ struct HCCHomeView: View {
     return Button {
       path.append(HCCHomeRoute.sleep(day: dayKey))
     } label: {
-      VStack(alignment: .leading, spacing: 0) {
+      VStack(alignment: .leading, spacing: 14) {
         HStack {
-          HCCLabel("Tonight's sleep", size: 11)
+          cardTitle("Tonight's sleep")
           Spacer(minLength: 8)
-          Text("›").foregroundStyle(HCCTheme.Color.muted)
+          Image(systemName: "chevron.right")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(HCCTheme.Color.chevron)
         }
         HCCTonightSleepCard(
           bedtime: Self.clockText(plan?.recommendedBedtime, zone: instanceZone),
           need: plan?.needH.map { HCCWallClock.duration(minutes: $0 * 60) }
         )
       }
-      .hccCard()
+      // The card that belongs to a metric carries that metric's wash. The 2b
+      // mock draws this one a shade lighter than the default pair: .10 → .03.
+      .hccCard(
+        tint: HCCTheme.Color.sleep,
+        tintTop: 0.10,
+        tintBottom: 0.03,
+        padding: Self.cardPadding
+      )
       .contentShape(RoundedRectangle(cornerRadius: HCCTheme.Radius.card, style: .continuous))
     }
     .buttonStyle(.plain)
@@ -447,22 +503,83 @@ struct HCCHomeView: View {
 
   private var dashboardSection: some View {
     let tiles = resolvedTiles
-    // Tiles are 8 apart (`.tile{margin-bottom:8px}`), not 10 — and the section
-    // header's 8-pt gap to the first tile comes from this same spacing.
-    return VStack(alignment: .leading, spacing: 8) {
-      HCCSectionHeader(title: "My Dashboard") {
-        HCCSectionLink(title: "Customize \u{270E}") { sheet = .customize }
+    // 10 between the header and the grid, 8 between the tiles themselves
+    // (`grid-gap:8px`).
+    return VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .firstTextBaseline) {
+        Text("My Dashboard")
+          .font(HCCTheme.Font.display(size: 18, weight: .semibold))
+          .tracking(-0.4)
+          .foregroundStyle(HCCTheme.Color.text)
+        Spacer(minLength: 8)
+        Button { sheet = .customize } label: {
+          Text("Customize \u{270E}")
+            .font(HCCTheme.Font.body(size: 12, weight: .semibold))
+            .foregroundStyle(HCCTheme.Color.accentText)
+        }
+        .buttonStyle(.plain)
       }
+      .padding(.horizontal, 2)
+
       if tiles.isEmpty {
         HCCEmptyNote("No tiles yet. Tap Customize once your instance is serving these streams.")
-          .hccCard()
+          .hccCard(padding: Self.cardPadding)
       } else {
-        ForEach(tiles) { tile in
-          tileView(tile)
+        VStack(spacing: 8) {
+          ForEach(Array(Self.tileRows(tiles).enumerated()), id: \.offset) { _, row in
+            tileRow(row)
+          }
         }
       }
     }
+    .padding(.top, 10)
   }
+
+  /// One line of the tile grid: two half-width tiles, or the full-width chart.
+  @ViewBuilder
+  private func tileRow(_ row: [HCCDashboardTile]) -> some View {
+    if row.count == 1, row[0].slug == Self.chartSlug {
+      tileView(row[0])
+    } else {
+      HStack(alignment: .top, spacing: 8) {
+        ForEach(row) { tile in
+          tileView(tile).frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        // An odd last tile keeps its column rather than stretching across both.
+        if row.count == 1 {
+          Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+        }
+      }
+      .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  /// The tiles, chunked into the grid's rows IN THE ORDER THEY ARRIVED. The
+  /// chart is the one tile that spans both columns, so it breaks the pair it
+  /// lands in rather than being moved out of the way.
+  static func tileRows(_ tiles: [HCCDashboardTile]) -> [[HCCDashboardTile]] {
+    var rows: [[HCCDashboardTile]] = []
+    var pending: [HCCDashboardTile] = []
+    for tile in tiles {
+      if tile.slug == chartSlug {
+        if !pending.isEmpty {
+          rows.append(pending)
+          pending = []
+        }
+        rows.append([tile])
+      } else {
+        pending.append(tile)
+        if pending.count == 2 {
+          rows.append(pending)
+          pending = []
+        }
+      }
+    }
+    if !pending.isEmpty { rows.append(pending) }
+    return rows
+  }
+
+  static let chartSlug = "strain_recovery_graph"
 
   /// The tiles to draw, in order, filtered to the ones this instance can
   /// actually fill.
@@ -510,7 +627,7 @@ struct HCCHomeView: View {
   /// it does, availability IS "the read that backs this tile came back with a
   /// value", which is the same question one step later.
   private func canFill(_ tile: HCCDashboardTile) -> Bool {
-    if tile.slug == "strain_recovery_graph" { return !chartPoints.isEmpty }
+    if tile.slug == Self.chartSlug { return !chartPoints.isEmpty }
     return tileValue(tile) != nil
   }
 
@@ -530,10 +647,10 @@ struct HCCHomeView: View {
 
   @ViewBuilder
   private func tileView(_ tile: HCCDashboardTile) -> some View {
-    if tile.slug == "strain_recovery_graph" {
-      VStack(alignment: .leading, spacing: 0) {
+    if tile.slug == Self.chartSlug {
+      VStack(alignment: .leading, spacing: 12) {
         HStack {
-          HCCLabel(tile.label, size: 11)
+          cardTitle(tile.label)
           Spacer(minLength: 8)
           HCCChip(
             chartEndsOnSelectedDay
@@ -541,14 +658,13 @@ struct HCCHomeView: View {
               : "\(chartPoints.count) days to \(chartPoints.last.map { HealthDataStore.hccShortDayLabel($0.day) } ?? "--")"
           )
         }
-        .padding(.bottom, 4)
         HCCStrainRecoveryChart(
           points: chartPoints,
           bands: store.hcc.instance?.scoreBands.recovery,
           highlightsLast: chartEndsOnSelectedDay
         )
       }
-      .hccCard()
+      .hccCard(radius: HCCTheme.Radius.tile, padding: Self.cardPadding)
     } else if let value = tileValue(tile) {
       HCCDashboardTileRow(
         label: tile.label,

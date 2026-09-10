@@ -524,18 +524,40 @@ replayed POST would log a second dose.
 | `HCC_DEBUG_JOURNAL_ANCHOR=impactsOnly` | Draws the impact card **alone**, so it can be screenshotted — see the caveat below |
 | `HCC_DEBUG_SAVE=1` | On the Journal: answers the first two yes/no behaviors (one yes, one no) and logs the first due dose, through the same store writes a tap goes through. Same warning as the Alarm and Customize sheets — it MUTATES SERVER STATE. |
 
-### The Tab Bar Is Laid Out Under Each Tab, Not As A Safe-Area Inset
+### The Tab Bar Floats; `HCCScreen` Leaves Room For It
 
-`AppShellView.cloudShell` used to mount `HCCTabBar` in a
-`.safeAreaInset(edge: .bottom)` on the `TabView`. That inset never reached the
-`ScrollView` inside `HCCScreen`: at maximum scroll the last ~85 pt of every
-cloud screen sat under the bar, hiding the Journal's whole impact grid and
-More's sign-out row. Moving the inset onto each tab's own stack did not fix it
-either. The bar is now a plain sibling in a `VStack` below each tab's stack,
-which bounds the scroll view above it for certain.
+REVISED 2026-09-09 (the "Tinted" restyle, `design_handoff_hcc_tinted`). The bar
+is a floating pill — inset 16 from each side, 22 above the bottom safe-area
+edge — and the Coach FAB sits 14 above it; both are `.overlay`s on each tab's
+`NavigationStack` in `AppShellView.cloudShell`, so content scrolls BENEATH
+them. Nothing bounds the scroll view above the bar any more. What keeps a
+screen's last card clear of it is `HCCScreen`'s bottom inset,
+`HCCTheme.Spacing.tabBarClearance` (90); Home's own scroll stack applies the
+same constant.
+
+Two earlier layouts are recorded here because both failed in ways that look
+right at first:
+
+- A `.safeAreaInset(edge: .bottom)` on the `TabView` (or on each tab's stack)
+  never reached the `ScrollView` inside `HCCScreen`; the last ~85 pt of every
+  cloud screen sat under the bar. The pre-restyle answer was a plain `VStack`
+  sibling, which bounded the scroll view for certain but cannot float.
+- Deciding the inset from `@Environment(\.isPresented)` — 90 in the shell, 18
+  in a sheet — was wrong too: `isPresented` reads true for a view PUSHED onto a
+  `NavigationStack` exactly as it does for a sheet, so every pushed detail
+  screen (Sleep, Recovery, Strain, Biomarkers, …) lost its clearance.
+
+`HCCScreen` now answers "am I under the floating chrome?" from geometry: a
+full-height screen in the shell (tab root or pushed) owns the status bar, so
+its TOP safe-area inset is the device's; an iPhone sheet starts below the
+status bar, so its top inset is 0 and it takes `HCCTheme.Spacing.sheetBottom`
+(18) instead. Pass `bottomClearance:` explicitly to override either way.
 
 Verify with `HCC_DEBUG_SCROLL_BOTTOM=1`, which scrolls any `HCCScreen` to its
-last card a few seconds after it appears.
+last card a few seconds after it appears — on a tab root, on a PUSHED screen
+(`HCC_DEBUG_OPEN_ROUTE=sleep` pushes one), and on a sheet
+(`HCC_DEBUG_OPEN_SCREEN=devices`), because the three are three different
+answers.
 
 ## The Training Tab
 

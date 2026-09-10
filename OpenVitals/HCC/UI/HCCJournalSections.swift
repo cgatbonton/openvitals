@@ -9,10 +9,12 @@ import SwiftUI
 
 /// How a yes/no behavior stands today.
 ///
-/// Three states, not two. "Unanswered" and "no" both draw the switch off, and
-/// conflating them is the bug this enum exists to prevent: the server deletes a
-/// cleared entry precisely so an unanswered day is not counted as a "no" in the
-/// impact maths, and a row that looked answered would quietly disagree with it.
+/// Three states, not two. Conflating "unanswered" with "no" is the bug this
+/// enum exists to prevent: the server deletes a cleared entry precisely so an
+/// unanswered day is not counted as a "no" in the impact maths, and a row that
+/// looked answered would quietly disagree with it. Each state has its own
+/// rendering in `HCCBehaviorAnswerPill` — "Yes", "No", and a dash — so the
+/// distinction survives on screen and not only in this type.
 enum HCCBehaviorAnswer: Equatable {
   case unanswered
   case yes
@@ -22,10 +24,17 @@ enum HCCBehaviorAnswer: Equatable {
   var isAnswered: Bool { self != .unanswered }
 }
 
-/// `.toggle` — a behavior's label and its switch.
+/// `.toggle` — a behavior's label and the pill that says how it stands.
 ///
 /// Tapping cycles yes → no → yes; a long press on an answered row clears it
 /// back to unanswered, which is the only way to take an answer back.
+///
+/// The answer is a PILL rather than a switch (handoff mock `3c`), because a
+/// two-position switch has nowhere to put the third state: an unanswered row
+/// drew off, exactly as a "no" did, and the muted label was the only thing
+/// telling them apart. The pill prints the answer — "Yes", "No", or a dash in
+/// the chevron colour with no ground at all — so the three states are three
+/// renderings. The label stays muted until answered as well; both say it.
 struct HCCBehaviorToggleRow: View {
   let label: String
   let answer: HCCBehaviorAnswer
@@ -35,14 +44,15 @@ struct HCCBehaviorToggleRow: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 10) {
+      HStack(spacing: 12) {
         Text(label)
           .font(HCCTheme.Font.body(size: 13))
-          // Muted until answered: the switch alone cannot say "no answer yet".
+          // Muted until answered: the pill's dash is the other half of the same
+          // statement, and a normal label beside it would half-contradict it.
           .foregroundStyle(answer.isAnswered ? HCCTheme.Color.text : HCCTheme.Color.muted)
           .fixedSize(horizontal: false, vertical: true)
         Spacer(minLength: 8)
-        HCCSwitch(isOn: .constant(answer.isYes))
+        HCCBehaviorAnswerPill(answer: answer)
       }
       .padding(.vertical, 9)
       .contentShape(Rectangle())
@@ -66,6 +76,54 @@ struct HCCBehaviorToggleRow: View {
   }
 }
 
+/// The handoff's answer pill: `Yes` on a recovery-tinted ground, `No` on plain
+/// white 8 %, and an em dash for unanswered on NO ground at all.
+///
+/// Private to the Journal: it is not `HCCPill`. That component is a status word
+/// at 9.5 pt with the tone palette; this is a 40-pt-wide answer column at 11 pt
+/// whose "no" is deliberately colourless — a "no" is an answer, not a warning,
+/// and tinting it red would grade a behavior the app does not grade.
+private struct HCCBehaviorAnswerPill: View {
+  let answer: HCCBehaviorAnswer
+
+  var body: some View {
+    Text(text)
+      .font(HCCTheme.Font.data(size: 11, weight: .medium))
+      .foregroundStyle(foreground)
+      .multilineTextAlignment(.center)
+      .frame(minWidth: 40)
+      .padding(.horizontal, 10)
+      .padding(.vertical, 4)
+      .background(Capsule().fill(background))
+  }
+
+  private var text: String {
+    switch answer {
+    case .unanswered: "\u{2014}"
+    case .yes: "Yes"
+    case .no: "No"
+    }
+  }
+
+  private var foreground: Color {
+    switch answer {
+    case .unanswered: HCCTheme.Color.chevron
+    case .yes: HCCTheme.Color.recoveryText
+    case .no: HCCTheme.Color.text
+    }
+  }
+
+  private var background: Color {
+    switch answer {
+    // No ground for an unanswered row: a pill outline there would look like a
+    // control that had been set to something.
+    case .unanswered: .clear
+    case .yes: HCCTheme.Color.recovery.opacity(0.18)
+    case .no: HCCTheme.Color.white(0.08)
+    }
+  }
+}
+
 /// A numeric behavior: a stepper in the behavior's own unit.
 ///
 /// Zero is a real answer ("no drinks"), so it is not used to mean "not logged".
@@ -82,7 +140,7 @@ struct HCCBehaviorNumberRow: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 10) {
+      HStack(spacing: 12) {
         VStack(alignment: .leading, spacing: 2) {
           Text(label)
             .font(HCCTheme.Font.body(size: 13))
@@ -95,10 +153,11 @@ struct HCCBehaviorNumberRow: View {
           }
         }
         Spacer(minLength: 8)
-        HCCStepper(
-          value: Binding(get: { value }, set: onChange),
+        HCCBehaviorCountStepper(
+          value: value,
+          unit: unit,
           range: range,
-          suffix: unit
+          onChange: onChange
         )
       }
       .padding(.vertical, 9)
@@ -108,6 +167,56 @@ struct HCCBehaviorNumberRow: View {
     }
     .accessibilityElement(children: .contain)
     .accessibilityAction(named: "Clear answer") { if isAnswered { onClear() } }
+  }
+}
+
+/// The count column of a numeric behavior: two 26-pt controls around the number
+/// itself, sized and coloured to sit in the same column as the yes/no pill.
+///
+/// Private rather than `HCCStepper` (the sheets' stepper) for two reasons the
+/// handoff is explicit about: the count reads MUTED mono here, not accent — it
+/// is an answer, not a control's current setting — and the buttons carry a fill
+/// with no hairline, which is the "Tinted" rule for every control on these
+/// screens. Behaviour is `HCCStepper`'s, unchanged: ±1, clamped to `range`, and
+/// the same `onChange` a tap on the sheet's stepper makes.
+private struct HCCBehaviorCountStepper: View {
+  let value: Int
+  let unit: String
+  let range: ClosedRange<Int>
+  let onChange: (Int) -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      button("minus", enabled: value - 1 >= range.lowerBound) {
+        onChange(max(range.lowerBound, value - 1))
+      }
+      Text(unit.isEmpty ? "\(value)" : "\(value) \(unit)")
+        .font(HCCTheme.Font.data(size: 11))
+        .monospacedDigit()
+        .foregroundStyle(HCCTheme.Color.muted)
+        .lineLimit(1)
+        .frame(minWidth: 40, alignment: .trailing)
+      button("plus", enabled: value + 1 <= range.upperBound) {
+        onChange(min(range.upperBound, value + 1))
+      }
+    }
+  }
+
+  private func button(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Image(systemName: symbol)
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(HCCTheme.Color.text)
+        .frame(width: 26, height: 26)
+        .background(
+          RoundedRectangle(cornerRadius: HCCTheme.Radius.small, style: .continuous)
+            .fill(HCCTheme.Color.control2)
+        )
+    }
+    .buttonStyle(.plain)
+    .disabled(!enabled)
+    .opacity(enabled ? 1 : 0.4)
+    .accessibilityLabel(symbol == "minus" ? "Decrease" : "Increase")
   }
 }
 
@@ -130,8 +239,10 @@ struct HCCDoseCheckRow: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 10) {
-        box
+      HStack(spacing: 12) {
+        // The shared 22/7 box, so a dose row and a Training set row can never
+        // drift into two different checkboxes.
+        HCCCheckbox(isOn: isTaken, size: 22, radius: 7)
         VStack(alignment: .leading, spacing: 2) {
           Text(title)
             .font(HCCTheme.Font.body(size: 13))
@@ -172,23 +283,6 @@ struct HCCDoseCheckRow: View {
     .accessibilityValue(isTaken ? "Taken, \(doseText)" : "Not taken, \(doseText)")
     .accessibilityAddTraits(isTaken ? [.isButton, .isSelected] : .isButton)
   }
-
-  private var box: some View {
-    RoundedRectangle(cornerRadius: 6, style: .continuous)
-      .fill(isTaken ? HCCTheme.Color.accent : Color.clear)
-      .overlay(
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
-          .strokeBorder(isTaken ? HCCTheme.Color.accent : HCCTheme.Color.muted, lineWidth: 1.5)
-      )
-      .overlay {
-        if isTaken {
-          Image(systemName: "checkmark")
-            .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(HCCTheme.Color.bg)
-        }
-      }
-      .frame(width: 20, height: 20)
-  }
 }
 
 // ── Impacts ──────────────────────────────────────────────────────────────────
@@ -212,7 +306,10 @@ struct HCCImpactGrid: View {
   let rows: [HCCImpactGridRow]
 
   var body: some View {
-    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
+    // The mockup's `gap:10` between the columns; the 12 between rows is its
+    // `padding:6px 0` on each row, expressed as the grid's own spacing rather
+    // than as padding on a row that would then stack with it.
+    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 12) {
       ForEach(rows) { row in
         GridRow {
           Text(row.label)
@@ -223,13 +320,14 @@ struct HCCImpactGrid: View {
             // delta and the sample size stay pinned to the right edge.
             .frame(maxWidth: .infinity, alignment: .leading)
           Text(row.delta ?? "—")
-            .font(HCCTheme.Font.data(size: 12.5))
+            .font(HCCTheme.Font.display(size: 15, weight: .semibold))
             .monospacedDigit()
             .foregroundStyle(deltaColor(row))
             .gridColumnAlignment(.trailing)
           Text(row.counts)
-            .font(HCCTheme.Font.data(size: 10.5))
+            .font(HCCTheme.Font.data(size: 10))
             .foregroundStyle(HCCTheme.Color.muted)
+            .frame(minWidth: 44, alignment: .trailing)
             .gridColumnAlignment(.trailing)
         }
         .accessibilityElement(children: .combine)
@@ -237,8 +335,10 @@ struct HCCImpactGrid: View {
     }
   }
 
+  /// Good green, watch amber, and the chevron grey for a row with no finding —
+  /// the dash is furniture, not a reading, so it takes the dimmest of the three.
   private func deltaColor(_ row: HCCImpactGridRow) -> Color {
-    guard let isImprovement = row.isImprovement else { return HCCTheme.Color.muted }
+    guard let isImprovement = row.isImprovement else { return HCCTheme.Color.chevron }
     return isImprovement ? HCCTheme.Color.good : HCCTheme.Color.warn
   }
 }

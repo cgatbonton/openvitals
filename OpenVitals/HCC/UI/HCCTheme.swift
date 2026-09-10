@@ -3,11 +3,12 @@ import UIKit
 
 // The "C · Command" design tokens, in one place.
 //
-// Every number and colour here is copied from the approved interactive mockup's
-// `.phone` custom-property block. Nothing downstream hardcodes a hex value, a
-// corner radius or a font name: a screen that needs a colour asks
-// `HCCTheme.Color`, and a screen that needs type asks `HCCTheme.Font`. That is
-// what makes a token change a one-file edit rather than a sweep.
+// Every number and colour here is copied from the approved design handoff
+// (`design_handoff_hcc_tinted/README.md`, direction "Tinted", mock `2b`).
+// Nothing downstream hardcodes a hex value, a corner radius or a font name: a
+// screen that needs a colour asks `HCCTheme.Color`, and a screen that needs type
+// asks `HCCTheme.Font`. That is what makes a token change a one-file edit rather
+// than a sweep.
 //
 // This file is cloud-mode only. `OpenVitalsTheme` still owns the bridge path's
 // look; the two never mix on one screen.
@@ -15,48 +16,98 @@ import UIKit
 enum HCCTheme {
   // ── Colour ─────────────────────────────────────────────────────────────────
 
-  /// The mockup's CSS custom properties. Names match the CSS variable names so
-  /// a token can be traced back to the mockup by grep.
+  /// The handoff's colour tokens. Names match the handoff's own names so a token
+  /// can be traced back to the spec by grep.
   enum Color {
-    /// `--bg` #070B14 — the page under the radial gradient.
-    static let bg = hex(0x070B14)
-    /// The radial gradient's hot centre, #14213D.
-    static let bgGlow = hex(0x14213D)
-    /// `--card` rgba(20,28,46,.72) — glass panel fill.
-    static let card = hex(0x141C2E, alpha: 0.72)
-    /// `--card2` rgba(28,38,62,.8) — the raised fill inside a card.
-    static let card2 = hex(0x1C263E, alpha: 0.80)
-    /// `--line` #1E2A45 — every hairline border and empty track.
-    static let line = hex(0x1E2A45)
-    /// `--text` #E9F0FF.
-    static let text = hex(0xE9F0FF)
-    /// `--muted` #7F8FB0 — labels, axes, secondary copy.
-    static let muted = hex(0x7F8FB0)
-    /// `--accent` #5AA9FF.
+    // ── Ground ───────────────────────────────────────────────────────────────
+
+    /// `#06080F` — the page base, and the flat colour below 45 %.
+    static let bg = hex(0x06080F)
+    /// `#0A1020` — the top of the page's vertical gradient.
+    static let bgTop = hex(0x0A1020)
+
+    // ── Surfaces ─────────────────────────────────────────────────────────────
+
+    /// `rgba(255,255,255,.045)` — the neutral card fill. No border, no material.
+    static let card = white(0.045)
+    /// `rgba(255,255,255,.05)` — the raised fill inside a card (tiles, rows).
+    static let card2 = white(0.05)
+    /// `rgba(255,255,255,.06)` — icon buttons, the day pill, utility buttons.
+    static let control = white(0.06)
+    /// `rgba(255,255,255,.07)` — chips, secondary buttons, menu controls.
+    static let control2 = white(0.07)
+    /// `rgba(255,255,255,.06)` — row dividers and empty tracks.
+    static let line = white(0.06)
+
+    // ── Text ─────────────────────────────────────────────────────────────────
+
+    /// `#EEF2FA` — primary text.
+    static let text = hex(0xEEF2FA)
+    /// `#D5DEF0` — body copy on a card (the Home insight card).
+    static let textBody = hex(0xD5DEF0)
+    /// `#C7D2EA` — secondary body (insight summaries).
+    static let textSecondary = hex(0xC7D2EA)
+    /// `#8A97B5` — labels, axes, meta.
+    static let muted = hex(0x8A97B5)
+    /// `#6E7C9C` — footnotes and tertiary lines.
+    static let muted2 = hex(0x6E7C9C)
+    /// `#55627F` — row chevrons and the unanswered dash.
+    static let chevron = hex(0x55627F)
+
+    // ── Accent and metric colours ────────────────────────────────────────────
+
+    /// `#5AA9FF`.
     static let accent = hex(0x5AA9FF)
+    /// `#8CC4FF` — accent text on a dark tint.
+    static let accentText = hex(0x8CC4FF)
 
-    /// `--rec` #3DF0B0.
-    static let rec = hex(0x3DF0B0)
-    /// `--sleep` #5AA9FF.
+    /// `#5AA9FF` — sleep.
     static let sleep = hex(0x5AA9FF)
-    /// `--strain` #39E0F0.
-    static let strain = hex(0x39E0F0)
-    /// `--band` #1F3A5C — the shaded optimal window on a band strip.
-    static let band = hex(0x1F3A5C)
+    /// `#8CC4FF` — sleep's light tint, for text on a sleep-tinted ground.
+    static let sleepText = hex(0x8CC4FF)
+    /// `#39E0F0` — recovery.
+    static let recovery = hex(0x39E0F0)
+    /// `#7BEAF5` — recovery's light tint.
+    static let recoveryText = hex(0x7BEAF5)
+    /// `#5A8BFF` — strain (indigo). NOTE this is not the strain RING's leading
+    /// colour: the ring gradient is cyan → indigo and keeps its own tokens
+    /// below, so changing the strain surface colour cannot silently repaint the
+    /// ring.
+    static let strain = hex(0x5A8BFF)
+    /// `#9DB4FF` — strain's light tint.
+    static let strainText = hex(0x9DB4FF)
 
-    /// `--good` #3DF0B0.
-    static let good = hex(0x3DF0B0)
-    /// `--warn` #FF9A62.
-    static let warn = hex(0xFF9A62)
-    /// `--bad` #FF5C7A.
+    /// `#3DF0B0` — the generic "good" green.
+    static let rec = hex(0x3DF0B0)
+    /// `#3DF0B0`, same token under the name the status vocabulary uses.
+    static let good = rec
+    /// `#7DF5C8` — good's light tint.
+    static let goodText = hex(0x7DF5C8)
+
+    /// `#F5C44B` — watch.
+    static let warn = hex(0xF5C44B)
+    /// `#FF5C7A` — alert.
     static let bad = hex(0xFF5C7A)
-    /// `--yellow` #FFD166 — the middle recovery band.
+    /// `#FFD166` — the middle recovery band on the strain/recovery chart.
     static let yellow = hex(0xFFD166)
+
+    /// `rgba(61,240,176,.22)` — the shaded optimal window on a band strip.
+    static let band = hex(0x3DF0B0, alpha: 0.22)
+
+    // ── Chrome ───────────────────────────────────────────────────────────────
+
+    /// `rgba(20,26,40,.92)` — the floating tab bar's fill.
+    static let tabBarFill = hex(0x141A28, alpha: 0.92)
+    /// `#070B14` — text and glyphs on the CTA gradient.
+    static let ctaText = hex(0x070B14)
+    /// `#07131F` — the Coach FAB's glyph.
+    static let fabGlyph = hex(0x07131F)
+    /// `#3A4560` — an unchecked checkbox's 1-px stroke.
+    static let checkboxStroke = hex(0x3A4560)
 
     // ── Ring furniture (web `src/components/ScoreRings.tsx`) ────────────────
     //
-    // The mockup and the web app disagreed on these; the web wins. They are
-    // named rather than inlined so a ring never carries a literal hex.
+    // Named rather than inlined so a ring never carries a literal hex.
 
     /// The empty track behind a progress arc, rgba(139,155,181,0.16).
     static let ringTrack = hex(0x8B9BB5, alpha: 0.16)
@@ -70,12 +121,18 @@ enum HCCTheme {
     static let ringMutedStart = hex(0x8A9BB5)
     static let ringMutedEnd = hex(0x5A6B85)
 
+    /// The sleep ring's trailing colour, `#2E6BE0`.
+    static let ringSleepEnd = hex(0x2E6BE0)
+    /// The strain ring's pair, `#39E0F0 → #5A8BFF`. Unchanged by the restyle:
+    /// the ring keeps the cyan lead even though the strain SURFACE colour moved
+    /// to indigo, which is why these are their own tokens.
+    static let ringStrainStart = hex(0x39E0F0)
+    static let ringStrainEnd = hex(0x5A8BFF)
+
     // ── Recovery orb (web `src/components/BiometricOrb.tsx`) ────────────────
     //
     // Recovery is the one score whose gradient depends on its BAND, so the
-    // colour itself carries the reading. These are the web's pairs; the flat
-    // `rec` green above stays for everything that is not a recovery band (the
-    // `good` tone, a positive delta, and so on).
+    // colour itself carries the reading.
 
     /// ≥ nominal — #39E0F0 → #8B7BFF.
     static let orbPrimed = (hex(0x39E0F0), hex(0x8B7BFF))
@@ -86,7 +143,7 @@ enum HCCTheme {
     /// No band to show — the muted ring pair.
     static let orbUnknown = (ringMutedStart, ringMutedEnd)
 
-    /// Heart-rate zone colours, Z1…Z5 (mockup `ZONES`).
+    /// Heart-rate zone colours, Z1…Z5.
     static let zones: [SwiftUI.Color] = [
       hex(0x7F8FB0), hex(0x5AA9FF), hex(0x39E0F0), hex(0xFFD166), hex(0xFF5C7A),
     ]
@@ -94,6 +151,54 @@ enum HCCTheme {
     /// Zone colour for a 1-based zone number, clamped.
     static func zone(_ number: Int) -> SwiftUI.Color {
       zones[min(max(number - 1, 0), zones.count - 1)]
+    }
+
+    // ── Gradients ────────────────────────────────────────────────────────────
+
+    /// `linear-gradient(135deg, #5AA9FF, #39E0F0)` — the primary CTA.
+    static let ctaGradient = LinearGradient(
+      colors: [hex(0x5AA9FF), hex(0x39E0F0)],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+
+    /// `linear-gradient(135deg, #5AA9FF, #3DF0B0)` — the Coach FAB.
+    static let fabGradient = LinearGradient(
+      colors: [hex(0x5AA9FF), hex(0x3DF0B0)],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+
+    /// `linear-gradient(135deg, rgba(57,224,240,.14), rgba(139,123,255,.10))` —
+    /// the Home insight card, the one card that also carries a border.
+    static let insightGradient = LinearGradient(
+      colors: [hex(0x39E0F0, alpha: 0.14), hex(0x8B7BFF, alpha: 0.10)],
+      startPoint: .topLeading,
+      endPoint: .bottomTrailing
+    )
+
+    /// The metric tint: a vertical wash of one metric's colour, used instead of
+    /// the neutral card fill on a card that belongs to that metric.
+    ///
+    /// `linear-gradient(180deg, rgba(metric, top), rgba(metric, bottom))`.
+    static func tint(_ color: SwiftUI.Color, top: Double = 0.15, bottom: Double = 0.035) -> LinearGradient {
+      LinearGradient(
+        colors: [color.opacity(top), color.opacity(bottom)],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+    }
+
+    /// A flat colour as a gradient, for the `fill:` entry point of `hccCard`.
+    static func flat(_ color: SwiftUI.Color) -> LinearGradient {
+      LinearGradient(colors: [color, color], startPoint: .top, endPoint: .bottom)
+    }
+
+    // ── Primitives ───────────────────────────────────────────────────────────
+
+    /// `rgba(255,255,255,alpha)` — the handoff writes every surface this way.
+    static func white(_ alpha: Double) -> SwiftUI.Color {
+      SwiftUI.Color(.sRGB, red: 1, green: 1, blue: 1, opacity: alpha)
     }
 
     static func hex(_ value: UInt32, alpha: Double = 1) -> SwiftUI.Color {
@@ -110,30 +215,62 @@ enum HCCTheme {
   // ── Radius ─────────────────────────────────────────────────────────────────
 
   enum Radius {
-    /// `--radius` — cards, tiles, hero panels.
-    static let card: CGFloat = 14
-    /// Activity rows, buttons, small controls.
-    static let small: CGFloat = 12
+    /// Cards.
+    static let card: CGFloat = 20
+    /// Dashboard tiles and the Health page grid.
+    static let tile: CGFloat = 16
+    /// Activity rows.
+    static let row: CGFloat = 14
+    /// Primary/secondary buttons.
+    static let button: CGFloat = 14
+    /// Icon buttons, the day pill, utility buttons, menu controls.
+    static let control: CGFloat = 12
+    /// The smallest controls — icon tiles inside a card, dropdowns.
+    static let small: CGFloat = 10
+    /// The floating tab bar.
+    static let tabBar: CGFloat = 24
     /// Sheets.
     static let sheet: CGFloat = 22
     /// Pills and chips (CSS 999px).
     static let pill: CGFloat = 999
   }
 
+  // ── Spacing ────────────────────────────────────────────────────────────────
+
+  /// The handoff's chrome geometry, in one place so the tab bar, the Coach FAB
+  /// and every scroll view's bottom inset are derived from the same numbers
+  /// rather than three magic constants that drift apart.
+  enum Spacing {
+    /// The bar is inset this far from each side.
+    static let tabBarInset: CGFloat = 16
+    /// …and floats this far above the bottom safe-area edge.
+    static let tabBarBottom: CGFloat = 22
+    /// The bar's own height: 8 pt of container padding each side over a 44-pt
+    /// item (6 + 22 glyph + 4 gap + ~12 label + 6).
+    static let tabBarHeight: CGFloat = 60
+    /// What a scrolling screen must leave below its last card so the card
+    /// clears the floating bar: the bar's box plus a breathing gap.
+    static let tabBarClearance: CGFloat = 90
+    /// The Coach FAB's own box, and how far it sits above the bar.
+    static let fabSize: CGFloat = 50
+    static let fabGap: CGFloat = 14
+    /// The FAB's distance from the bottom safe-area edge.
+    static var fabBottom: CGFloat { tabBarBottom + tabBarHeight + fabGap }
+    /// A screen with no floating chrome under it (a sheet) still wants a little
+    /// air below the last card.
+    static let sheetBottom: CGFloat = 18
+  }
+
   // ── Type ───────────────────────────────────────────────────────────────────
 
-  /// The three families the mockup uses, resolved once.
+  /// The three families the design uses, resolved once.
   ///
-  /// The font files are not bundled yet. Rather than scatter `.custom("Outfit")`
-  /// through the screens — which silently falls back to the system font per call
-  /// site and is invisible to review — every text style goes through here. When
-  /// the families are added to the target this file is the only edit, and until
-  /// then the fallbacks are chosen to keep the *shape* of the design: a rounded
-  /// display face for titles and big numbers, and a monospaced face wherever the
-  /// mockup wants tabular digits.
+  /// Outfit's DEFAULT instance is Thin, so every display call must carry a
+  /// weight — `.display(size:)` without one would silently render hairline.
+  /// The handoff moved the display face to 600, which is the default here.
   enum Font {
-    /// Titles and big numbers — Outfit 500 in the mockup.
-    static func display(size: CGFloat, weight: SwiftUI.Font.Weight = .medium) -> SwiftUI.Font {
+    /// Titles and big numbers — Outfit.
+    static func display(size: CGFloat, weight: SwiftUI.Font.Weight = .semibold) -> SwiftUI.Font {
       resolve(Resolved.display, size: size, weight: weight, fallbackDesign: .rounded)
     }
 
@@ -181,64 +318,49 @@ enum HCCTheme {
 
 // ── Background ───────────────────────────────────────────────────────────────
 
-/// The screen ground: a wide, shallow navy glow at the top over near-black.
+/// The screen ground: a vertical wash from `#0A1020` at the top to `#06080F` at
+/// 45 %, flat below.
 ///
-/// The CSS is `radial-gradient(120% 60% at 50% -10%, #14213D 0%, #070B14 60%)`,
-/// an ELLIPSE — wider than it is tall and centred above the top edge. SwiftUI's
-/// `RadialGradient` is circular, so the ellipse is built by drawing the circular
-/// gradient at the vertical radius and stretching it horizontally.
+/// (The radial navy glow of the first design is gone — the "Tinted" direction
+/// puts the colour on the cards instead of behind them.)
 struct HCCBackground: View {
   var body: some View {
-    GeometryReader { proxy in
-      let width = max(proxy.size.width, 1)
-      let height = max(proxy.size.height, 1)
-      // The CSS percentages are of the box, and `at 50% -10%` is the centre.
-      let verticalRadius = height * 0.6
-      let horizontalRadius = width * 1.2
-
-      HCCTheme.Color.bg
-        .overlay(alignment: .topLeading) {
-          RadialGradient(
-            gradient: Gradient(stops: [
-              .init(color: HCCTheme.Color.bgGlow, location: 0),
-              .init(color: HCCTheme.Color.bg, location: 1),
-            ]),
-            center: .center,
-            startRadius: 0,
-            endRadius: verticalRadius
-          )
-          .frame(width: verticalRadius * 2, height: verticalRadius * 2)
-          .scaleEffect(x: horizontalRadius / verticalRadius, y: 1, anchor: .center)
-          .position(x: width / 2, y: -0.1 * height)
-        }
-        .clipped()
-    }
+    LinearGradient(
+      stops: [
+        .init(color: HCCTheme.Color.bgTop, location: 0),
+        .init(color: HCCTheme.Color.bg, location: 0.45),
+        .init(color: HCCTheme.Color.bg, location: 1),
+      ],
+      startPoint: .top,
+      endPoint: .bottom
+    )
     .ignoresSafeArea()
   }
 }
 
 // ── Card ─────────────────────────────────────────────────────────────────────
 
-/// The glass panel: translucent navy fill over an 8-pt blur, one hairline
-/// border, 14-pt corners.
+/// The card: a fill and 20-pt corners. No stroke, no material — the "Tinted"
+/// direction carries separation by fill alone, and the ONE card with a border
+/// (Home's insight card) asks for it explicitly through the `fill:` entry point.
 private struct HCCCardModifier: ViewModifier {
-  let secondary: Bool
+  let fill: LinearGradient
+  let border: Color?
   let radius: CGFloat
   let padding: EdgeInsets?
 
   func body(content: Content) -> some View {
     let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
     return content
-      .padding(padding ?? EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
+      // The handoff's card padding: 14 vertical × 16 horizontal.
+      .padding(padding ?? EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background {
-        shape
-          // `backdrop-filter: blur(8px)` — the material is the blur, the fill
-          // on top is the card's own colour.
-          .fill(.ultraThinMaterial)
-          .overlay(shape.fill(secondary ? HCCTheme.Color.card2 : HCCTheme.Color.card))
+      .background(shape.fill(fill))
+      .overlay {
+        if let border {
+          shape.strokeBorder(border, lineWidth: 1)
+        }
       }
-      .overlay(shape.strokeBorder(HCCTheme.Color.line, lineWidth: 1))
       .clipShape(shape)
   }
 }
@@ -249,19 +371,45 @@ extension View {
     background(HCCBackground())
   }
 
-  /// The mockup's `.card` (or `.card2` when `secondary`).
+  /// The handoff's `.card`.
+  ///
+  /// - `secondary` swaps the neutral fill for the raised `card2`.
+  /// - `tint` swaps it for that metric's vertical wash — the "card that belongs
+  ///   to a metric carries the metric's colour" rule. `tintTop`/`tintBottom` are
+  ///   the two alphas; the handoff uses 0.14–0.16 → 0.03–0.04 and a few cards
+  ///   ask for a lighter pair (Genetics 0.08 → 0.02).
   func hccCard(
     secondary: Bool = false,
+    tint: Color? = nil,
+    tintTop: Double = 0.15,
+    tintBottom: Double = 0.035,
     radius: CGFloat = HCCTheme.Radius.card,
     padding: EdgeInsets? = nil
   ) -> some View {
-    modifier(HCCCardModifier(secondary: secondary, radius: radius, padding: padding))
+    let fill: LinearGradient = {
+      if let tint { return HCCTheme.Color.tint(tint, top: tintTop, bottom: tintBottom) }
+      return HCCTheme.Color.flat(secondary ? HCCTheme.Color.card2 : HCCTheme.Color.card)
+    }()
+    return modifier(HCCCardModifier(fill: fill, border: nil, radius: radius, padding: padding))
   }
 
-  /// The small-caps treatment, for a label that is already a `Text`.
+  /// The card with an arbitrary fill and an optional 1-px border — the escape
+  /// hatch for Home's insight card, which is the one card in the design that is
+  /// neither neutral nor a single metric's tint.
+  func hccCard(
+    fill: LinearGradient,
+    border: Color? = nil,
+    radius: CGFloat = HCCTheme.Radius.card,
+    padding: EdgeInsets? = nil
+  ) -> some View {
+    modifier(HCCCardModifier(fill: fill, border: border, radius: radius, padding: padding))
+  }
+
+  /// The micro-label treatment, for a label that is already a `Text`:
+  /// Plex Sans 700, uppercase, tracking 0.9 at 10 pt.
   func hccLabelStyle(size: CGFloat = 10, color: SwiftUI.Color = HCCTheme.Color.muted) -> some View {
-    font(HCCTheme.Font.body(size: size, weight: .semibold))
-      .tracking(size * 0.12)
+    font(HCCTheme.Font.body(size: size, weight: .bold))
+      .tracking(size * 0.09)
       .textCase(.uppercase)
       .foregroundStyle(color)
   }
@@ -269,9 +417,8 @@ extension View {
 
 // ── Label ────────────────────────────────────────────────────────────────────
 
-/// The uppercase, letter-spaced micro-label the mockup puts over every group
-/// (`.ringwrap .lbl`, `.card h4`, `.stat3 .l`): 10–11 pt, weight 600,
-/// letter-spacing 0.12em, muted.
+/// The uppercase, letter-spaced micro-label over every group: Plex Sans 700,
+/// 10 pt, tracking 0.9, muted `#8A97B5`.
 struct HCCLabel: View {
   let text: String
   var size: CGFloat = 10
@@ -291,7 +438,7 @@ struct HCCLabel: View {
 
 // ── Recovery bands ───────────────────────────────────────────────────────────
 
-/// Where a recovery score sits, and what the mockup calls it.
+/// Where a recovery score sits, and what the design calls it.
 ///
 /// The cutoffs (67 / 34) are the server's own published bands — they arrive on
 /// `/instance` as `scoreBands.recovery` — and are duplicated here only as the
@@ -302,7 +449,7 @@ enum HCCRecoveryBand {
   case moderate
   case rest
 
-  /// Fallback cutoffs, matching the mockup's `recBand`.
+  /// Fallback cutoffs.
   static let defaultNominal: Double = 67
   static let defaultWatch: Double = 34
 
@@ -327,9 +474,6 @@ enum HCCRecoveryBand {
 
   /// The band's own colour — the LEADING colour of its orb gradient, so a pill,
   /// a chip, a word and the ring beside them never disagree.
-  ///
-  /// Note this is not `HCCTheme.Color.rec`: that flat green stays for the
-  /// places the design uses "good" generically, outside the recovery bands.
   var color: SwiftUI.Color { gradient.0 }
 
   /// "Primed" / "Moderate" / "Rest" — a readiness word, not a health claim.
@@ -352,14 +496,9 @@ extension HCCTheme.Font {
   /// system face — which is exactly what makes a bundling mistake invisible.
   /// This says out loud whether the real face is installed, which faces the
   /// family exposes, and which concrete face a weight request lands on.
-  ///
-  /// Variable fonts matter here: Outfit and IBM Plex Sans ship as single
-  /// variable files, and iOS registers their named instances as separate faces
-  /// within the family. That is what makes `.weight(.medium)` resolvable rather
-  /// than always returning the default instance.
   static func debugResolutionReport() -> [String] {
     [
-      report(role: "display", family: "Outfit", weight: .medium),
+      report(role: "display", family: "Outfit", weight: .semibold),
       report(role: "body", family: "IBM Plex Sans", weight: .regular),
       report(role: "data", family: "IBM Plex Mono", weight: .regular),
     ]

@@ -1,37 +1,49 @@
 import SwiftUI
 
-/// The bottom bar from the mockup's `.tabs`: 22-pt line icons over 10.5-pt
-/// labels, muted until selected, accent when selected, over a hairline top rule
-/// on the flat page colour.
+/// The floating pill tab bar: 22-pt SF Symbols over 10-pt labels, muted until
+/// selected, accent when selected, on `rgba(20,26,40,.92)` with a 24-pt radius.
+///
+/// It FLOATS — inset 16 from each side, 22 above the bottom safe-area edge —
+/// and the content scrolls beneath it. Nothing here is full-bleed and there is
+/// no hairline rule: a screen's last card clears the bar because its scroll view
+/// leaves `HCCTheme.Spacing.tabBarClearance` below the content, not because the
+/// bar occupies layout space.
 ///
 /// All five of the mockup's tabs are here from the start — Home · Health ·
-/// Journal · Training · More. Journal and Training open a themed screen with
-/// one line saying which phase they arrive in. That is deliberate: the bar's
-/// shape is part of the design, and a page that states plainly it is not built
-/// yet is honest, where a tab that appears months later is a surprise.
+/// Journal · Training · More.
 struct HCCTabBar: View {
   @Binding var selection: OpenVitalsAppTab
   let tabs: [OpenVitalsAppTab]
 
   var body: some View {
-    HStack(alignment: .top, spacing: 0) {
+    let shape = RoundedRectangle(cornerRadius: HCCTheme.Radius.tabBar, style: .continuous)
+    return HStack(alignment: .top, spacing: 0) {
       ForEach(tabs) { tab in
         item(tab)
       }
     }
     .padding(.horizontal, 6)
-    .padding(.top, 10)
-    .padding(.bottom, 6)
+    .padding(.vertical, 8)
     .frame(maxWidth: .infinity)
-    .background(alignment: .top) {
-      ZStack(alignment: .top) {
-        HCCTheme.Color.bg
-        Rectangle()
-          .fill(HCCTheme.Color.line)
-          .frame(height: 1)
-      }
-      .ignoresSafeArea(edges: .bottom)
+    .background {
+      shape
+        .fill(HCCTheme.Color.tabBarFill)
+        // `inset 0 1px 0 rgba(255,255,255,.06)` — a top highlight, faded out
+        // down the sides so it reads as a lit edge rather than an outline.
+        .overlay {
+          shape.strokeBorder(
+            LinearGradient(
+              colors: [HCCTheme.Color.white(0.06), Color.clear],
+              startPoint: .top,
+              endPoint: .bottom
+            ),
+            lineWidth: 1
+          )
+        }
+        .shadow(color: Color.black.opacity(0.5), radius: 16, x: 0, y: 12)
     }
+    .padding(.horizontal, HCCTheme.Spacing.tabBarInset)
+    .padding(.bottom, HCCTheme.Spacing.tabBarBottom)
   }
 
   private func item(_ tab: OpenVitalsAppTab) -> some View {
@@ -39,17 +51,17 @@ struct HCCTabBar: View {
     return Button {
       selection = tab
     } label: {
-      VStack(spacing: 5) {
+      VStack(spacing: 4) {
         Image(systemName: Self.icon(for: tab))
-          .font(.system(size: 19, weight: .regular))
-          .frame(width: 22, height: 22)
+          .font(.system(size: 20, weight: .regular))
+          .frame(height: 22)
         Text(tab.title)
-          .font(HCCTheme.Font.body(size: 10.5, weight: .medium))
-          .tracking(0.21)
+          .font(HCCTheme.Font.body(size: 10, weight: .semibold))
+          .tracking(0.2)
       }
       .foregroundStyle(isSelected ? HCCTheme.Color.accent : HCCTheme.Color.muted)
       .frame(maxWidth: .infinity)
-      .padding(.vertical, 4)
+      .padding(.vertical, 6)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -89,8 +101,8 @@ struct HCCPhaseScreen: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       Text(title)
-        .font(HCCTheme.Font.display(size: 20, weight: .medium))
-        .tracking(-0.4)
+        .font(HCCTheme.Font.display(size: 26, weight: .semibold))
+        .tracking(-0.6)
         .foregroundStyle(HCCTheme.Color.text)
       Text(note)
         .font(HCCTheme.Font.body(size: 12.5))

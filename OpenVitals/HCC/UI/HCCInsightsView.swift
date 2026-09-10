@@ -33,7 +33,7 @@ struct HCCInsightsView: View {
 
   var body: some View {
     HCCScreen {
-      HCCDetailHeader(title: "Insights", subtitle: "What the system has surfaced")
+      HCCDetailHeader(title: "Insights", subtitle: "What the system has surfaced", size: 24)
 
       HCCFootnote("A week-by-week log on top, and the open insights underneath — each in plain words, with the plan to deal with it.")
 
@@ -54,7 +54,12 @@ struct HCCInsightsView: View {
 
   @ViewBuilder
   private var weeklySection: some View {
-    HCCSectionHeader(title: "Weekly log")
+    // The handoff titles these two groups with the card micro-label, not the
+    // display-font section header. The 6 above it is the mock's own
+    // `padding:6px 2px 0`, on top of the stack's 10.
+    HCCLabel("Weekly log")
+      .padding(.top, 6)
+      .padding(.horizontal, 2)
     HCCFootnote("Written each week for the seven days just closed: sleep, recovery, load, body composition, labs, and how the running protocols look.")
 
     if weekly.isPending {
@@ -87,7 +92,9 @@ struct HCCInsightsView: View {
 
   @ViewBuilder
   private var insightsSection: some View {
-    HCCSectionHeader(title: "Insights & flags")
+    HCCLabel("Insights & flags")
+      .padding(.top, 6)
+      .padding(.horizontal, 2)
     HCCFootnote("What is going on and why it matters, with the plan for each. Resolved ones stay listed, dimmed.")
 
     if cards.isPending {
@@ -154,18 +161,20 @@ private struct WeeklyLogRow: View {
         withAnimation(.easeInOut(duration: 0.16)) { isOpen.toggle() }
       } label: {
         HStack(alignment: .top, spacing: 9) {
-          Text("▶")
-            .font(HCCTheme.Font.body(size: 9))
+          Image(systemName: "chevron.right")
+            .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(HCCTheme.Color.muted)
             .rotationEffect(.degrees(isOpen ? 90 : 0))
-            .padding(.top, 3)
+            .padding(.top, 4)
 
-          VStack(alignment: .leading, spacing: 5) {
+          VStack(alignment: .leading, spacing: 6) {
             Text(HCCInsightsView.weekRange(row))
               .font(HCCTheme.Font.data(size: 10.5))
               .foregroundStyle(HCCTheme.Color.muted)
             Text(row.headline)
               .font(HCCTheme.Font.display(size: 13.5, weight: .medium))
+              // Target 18-pt line at 13.5 pt.
+              .lineSpacing(1.8)
               .foregroundStyle(HCCTheme.Color.text)
               .fixedSize(horizontal: false, vertical: true)
               .multilineTextAlignment(.leading)
@@ -202,7 +211,7 @@ private struct WeeklyLogRow: View {
           if let delta = chip.delta {
             Text("(\(delta))")
               .font(HCCTheme.Font.data(size: 10.5))
-              .foregroundStyle(HCCTheme.Color.muted)
+              .foregroundStyle(HCCTheme.Color.muted2)
           }
         }
       }
@@ -218,6 +227,8 @@ private struct WeeklyLogRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
               Text("•").foregroundStyle(HCCTheme.Color.accent)
               Text(line)
+                // Target 17-pt line at 12.5 pt.
+                .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(HCCTheme.Color.text)
             }
@@ -228,9 +239,10 @@ private struct WeeklyLogRow: View {
       HCCMarkdown(text: row.summary, color: HCCTheme.Color.muted)
       Text(writtenLine)
         .font(HCCTheme.Font.body(size: 10.5))
-        .foregroundStyle(HCCTheme.Color.muted)
+        .foregroundStyle(HCCTheme.Color.muted2)
     }
-    .padding(.leading, 18)
+    // 19 — the mock indents the expanded block past the disclosure chevron.
+    .padding(.leading, 19)
     .padding(.bottom, 12)
   }
 
@@ -330,10 +342,12 @@ struct HCCInsightPanel: View {
       HCCStatusDot(status: HCCStatusDot.severityStatus(card.severity), size: 7)
         .padding(.top, 6)
 
-      VStack(alignment: .leading, spacing: 6) {
+      VStack(alignment: .leading, spacing: 8) {
         Text(card.title)
-          .font(HCCTheme.Font.display(size: 15, weight: .medium))
-          .tracking(-0.15)
+          .font(HCCTheme.Font.display(size: 15, weight: .semibold))
+          .tracking(-0.2)
+          // Target 20-pt line at 15 pt.
+          .lineSpacing(2)
           .foregroundStyle(HCCTheme.Color.text)
           .fixedSize(horizontal: false, vertical: true)
 
@@ -345,7 +359,7 @@ struct HCCInsightPanel: View {
           }
         }
 
-        HCCMarkdown(text: card.summary)
+        HCCMarkdown(text: card.summary, color: HCCTheme.Color.textSecondary)
 
         planBlock
 
@@ -353,33 +367,27 @@ struct HCCInsightPanel: View {
 
         Text(footer)
           .font(HCCTheme.Font.body(size: 10.5))
-          .foregroundStyle(HCCTheme.Color.muted)
+          .foregroundStyle(HCCTheme.Color.muted2)
       }
       Spacer(minLength: 0)
     }
     .hccCard()
     // Resolved cards stay listed, dimmed — they are the record of what was
     // closed out as right, not clutter to hide.
-    .opacity(card.status == "ACTIVE" ? 1 : 0.6)
+    .opacity(card.status == "ACTIVE" ? 1 : 0.55)
   }
 
   @ViewBuilder
   private var planBlock: some View {
     if let plan = card.plan, !plan.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      VStack(alignment: .leading, spacing: 4) {
-        HCCLabel("The plan", size: 10, color: HCCTheme.Color.accent)
+      // Label over text, no box: the handoff's only bordered card is Home's
+      // insight card, and the mock draws the plan as a micro-label in the
+      // accent's light tint over muted prose.
+      VStack(alignment: .leading, spacing: 3) {
+        HCCLabel("The plan", size: 9.5, color: HCCTheme.Color.accentText)
         HCCMarkdown(text: plan, color: HCCTheme.Color.muted)
       }
-      .padding(10)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        RoundedRectangle(cornerRadius: 11, style: .continuous)
-          .fill(HCCTheme.Color.accent.opacity(0.06))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 11, style: .continuous)
-          .strokeBorder(HCCTheme.Color.accent.opacity(0.25), lineWidth: 1)
-      )
     } else {
       Text("No plan recorded for this one yet.")
         .font(HCCTheme.Font.body(size: 11))
@@ -398,14 +406,14 @@ struct HCCInsightPanel: View {
       Button {
         withAnimation(.easeInOut(duration: 0.16)) { showsDetail.toggle() }
       } label: {
-        HStack(spacing: 5) {
-          Text("▶")
-            .font(HCCTheme.Font.body(size: 9))
-            .rotationEffect(.degrees(showsDetail ? 90 : 0))
+        HStack(spacing: 6) {
           Text("The detail behind it")
             .font(HCCTheme.Font.body(size: 11))
+          Image(systemName: "chevron.right")
+            .font(.system(size: 9, weight: .semibold))
+            .rotationEffect(.degrees(showsDetail ? 90 : 0))
         }
-        .foregroundStyle(HCCTheme.Color.muted)
+        .foregroundStyle(HCCTheme.Color.muted2)
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
@@ -428,13 +436,11 @@ struct HCCInsightPanel: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The raised inner surface, and nothing else — the "Tinted" direction
+        // separates by fill, never by a hairline.
         .background(
-          RoundedRectangle(cornerRadius: 11, style: .continuous)
+          RoundedRectangle(cornerRadius: HCCTheme.Radius.row, style: .continuous)
             .fill(HCCTheme.Color.card2)
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 11, style: .continuous)
-            .strokeBorder(HCCTheme.Color.line, lineWidth: 1)
         )
       }
     }

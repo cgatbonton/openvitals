@@ -277,7 +277,12 @@ struct HCCTrainingView: View {
     if days.isEmpty {
       HCCEmptyNote("This week has not been resolved yet.").hccCard()
     } else if let day = selected {
-      HCCSectionHeader(title: Self.dayHeading(day: day, todayYmd: data.todayYmd))
+      // The handoff's section marker above the day's cards is a micro-label
+      // ("TODAY"), not a display-weight section title. Same string as before —
+      // `HCCLabel` uppercases it.
+      HCCLabel(Self.dayHeading(day: day, todayYmd: data.todayYmd))
+        .padding(.top, 6)
+        .padding(.leading, 2)
       dayCards(
         day: day,
         data: data,

@@ -33,11 +33,17 @@ struct HCCMoreScreen: View {
 
   var body: some View {
     HCCScreen {
-      HCCDetailHeader(title: "More", showsBack: false)
-      accountCard
-      devicesCard
-      notificationsCard
-      appCard
+      // The four groups sit 18 apart, which is More's own rhythm rather than
+      // `HCCScreen`'s 10 — so they are held in their OWN stack at that spacing,
+      // the one mechanism "Card Spacing Is Stack Spacing" allows. Nothing here
+      // carries a bottom padding to make a gap.
+      VStack(alignment: .leading, spacing: 18) {
+        HCCDetailHeader(title: "More", showsBack: false)
+        accountCard
+        devicesCard
+        notificationsCard
+        appCard
+      }
     }
     .sheet(item: $sheet) { destination in
       sheetContent(destination)
@@ -72,36 +78,40 @@ struct HCCMoreScreen: View {
 
   // ── Cards ──────────────────────────────────────────────────────────────────
 
+  /// The one tinted group: recovery cyan, with its details in the matching
+  /// light tint. It is the card that says WHOSE command center this is, and the
+  /// handoff gives that card the colour rather than a heavier fill.
   private var accountCard: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HCCLabel("Account")
-      VStack(spacing: 0) {
-        HCCMenuRow(title: "Command center", detail: session.baseURL.host ?? session.baseURL.absoluteString)
-        HCCMenuRow(title: "Signed in as", detail: signedInAs)
-        // There is no created-at on the token this app holds — the server does
-        // not send one with the session — so the row says what IS known.
-        HCCMenuRow(title: "Mobile token", detail: session.isSignedIn ? "Active" : "Not signed in", showsDivider: false)
-        // The card ends here. No "Refresh now" row: this screen carries only
-        // what `S.more` shows, and Home's pull-to-refresh is the manual reread.
-      }
+    group("Account", tint: HCCTheme.Color.recovery) {
+      HCCMenuRow(
+        title: "Command center",
+        detail: session.baseURL.host ?? session.baseURL.absoluteString,
+        detailColor: HCCTheme.Color.recoveryText
+      )
+      HCCMenuRow(title: "Signed in as", detail: signedInAs, detailColor: HCCTheme.Color.recoveryText)
+      // There is no created-at on the token this app holds — the server does
+      // not send one with the session — so the row says what IS known.
+      HCCMenuRow(
+        title: "Mobile token",
+        detail: session.isSignedIn ? "Active" : "Not signed in",
+        detailColor: HCCTheme.Color.recoveryText,
+        showsDivider: false
+      )
+      // The card ends here. No "Refresh now" row: this screen carries only
+      // what `S.more` shows, and Home's pull-to-refresh is the manual reread.
     }
-    .hccCard()
   }
 
   private var devicesCard: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HCCLabel("Devices & data")
-      VStack(spacing: 0) {
-        HCCMenuRow(title: "Devices", detail: deviceCount) { sheet = .devices }
-        // HCC: P3-H's row and sheet — the real upload state, not a placeholder.
-        HCCWatchUploadRow(uploader: HCCHealthKitUploader.shared) { sheet = .watchUpload }
-        HCCMenuRow(title: "Log a reading", detail: "Weight, BP, glucose") {
-          sheet = .logReading
-        }
-        HCCMenuRow(title: "Dashboard tiles", detail: tileCount, showsDivider: false) { sheet = .customize }
+    group("Devices & data") {
+      HCCMenuRow(title: "Devices", detail: deviceCount) { sheet = .devices }
+      // HCC: P3-H's row and sheet — the real upload state, not a placeholder.
+      HCCWatchUploadRow(uploader: HCCHealthKitUploader.shared) { sheet = .watchUpload }
+      HCCMenuRow(title: "Log a reading", detail: "Weight, BP, glucose") {
+        sheet = .logReading
       }
+      HCCMenuRow(title: "Dashboard tiles", detail: tileCount, showsDivider: false) { sheet = .customize }
     }
-    .hccCard()
   }
 
   /// Push state, said plainly.
@@ -113,48 +123,88 @@ struct HCCMoreScreen: View {
   /// whether the server knows how to reach it. The footnote says so, rather
   /// than leaving two rows that look like they should be tappable.
   private var notificationsCard: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HCCLabel("Notifications")
-      VStack(spacing: 0) {
-        HCCMenuRow(title: "Morning recovery", detail: push.state.rowDetail)
-        HCCMenuRow(title: "Insight alerts", detail: push.state.rowDetail)
-        HCCMenuRow(title: "Alarm", detail: alarmSummary) { sheet = .alarm }
-        HCCToggleRow(
-          title: "Strain Live Activity",
-          isOn: Binding(
-            get: { liveActivity.isEnabled },
-            set: { liveActivity.setEnabled($0, store: healthStore) }
-          ),
-          showsDivider: false
-        )
-      }
+    group("Notifications") {
+      HCCMenuRow(title: "Morning recovery", detail: push.state.rowDetail)
+      HCCMenuRow(title: "Insight alerts", detail: push.state.rowDetail)
+      HCCMenuRow(title: "Alarm", detail: alarmSummary) { sheet = .alarm }
+      HCCToggleRow(
+        title: "Strain Live Activity",
+        isOn: Binding(
+          get: { liveActivity.isEnabled },
+          set: { liveActivity.setEnabled($0, store: healthStore) }
+        ),
+        showsDivider: false
+      )
+    } footnotes: {
+      // Below the card, not inside it: the sentence is about the whole group,
+      // and a footnote in the card would read as another row.
       if let note = push.state.note {
         HCCFootnote(note)
       }
       HCCFootnote(liveActivityNote)
     }
-    .hccCard()
   }
 
   private var appCard: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HCCLabel("App")
-      VStack(spacing: 0) {
-        // A plain row that pushes, rather than a `NavigationLink` wrapping one:
-        // `HCCMenuRow` owns its own tap, and nesting the two would give the row
-        // two hit targets that disagree about what a tap does.
-        HCCMenuRow(title: "Appearance", detail: "System") {
-          router.morePath.append(.appearance)
-        }
-        HCCMenuRow(title: "Widgets", detail: widgetSummaryDetail) { sheet = .widgets }
-        HCCMenuRow(title: "Privacy & data flow") { sheet = .consent }
-        HCCMenuRow(title: "Sign out", detail: isSigningOut ? "Signing out…" : nil, showsDivider: false) {
-          guard !isSigningOut else { return }
-          showSignOutConfirmation = true
-        }
+    group("App") {
+      // A plain row that pushes, rather than a `NavigationLink` wrapping one:
+      // `HCCMenuRow` owns its own tap, and nesting the two would give the row
+      // two hit targets that disagree about what a tap does.
+      HCCMenuRow(title: "Appearance", detail: "System") {
+        router.morePath.append(.appearance)
+      }
+      HCCMenuRow(title: "Widgets", detail: widgetSummaryDetail) { sheet = .widgets }
+      HCCMenuRow(title: "Privacy & data flow") { sheet = .consent }
+      // Sign out ACTS, it does not navigate — so it is the one row the handoff
+      // draws bare, against `HCCMenuRow`'s "chevron follows action" default.
+      HCCMenuRow(
+        title: "Sign out",
+        detail: isSigningOut ? "Signing out…" : nil,
+        showsDivider: false,
+        showsChevron: false
+      ) {
+        guard !isSigningOut else { return }
+        showSignOutConfirmation = true
       }
     }
-    .hccCard()
+  }
+
+  // ── Group ──────────────────────────────────────────────────────────────────
+
+  /// One More group: the micro-label, then the card of rows, then whatever
+  /// footnotes belong under it.
+  ///
+  /// The label lives OUTSIDE the card (handoff mock `3b`), which is what lets
+  /// the card take the tight `2 × 16` padding — the rows' own 13-pt vertical
+  /// padding is the group's top and bottom air, so a card padding of 14 would
+  /// add a second helping of it.
+  @ViewBuilder
+  private func group<Rows: View, Footnotes: View>(
+    _ title: String,
+    tint: Color? = nil,
+    @ViewBuilder rows: () -> Rows,
+    @ViewBuilder footnotes: () -> Footnotes
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HCCLabel(title)
+        .padding(.horizontal, 2)
+      VStack(spacing: 0) {
+        rows()
+      }
+      .hccCard(
+        tint: tint,
+        padding: EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16)
+      )
+      footnotes()
+    }
+  }
+
+  private func group<Rows: View>(
+    _ title: String,
+    tint: Color? = nil,
+    @ViewBuilder rows: () -> Rows
+  ) -> some View {
+    group(title, tint: tint, rows: rows) { EmptyView() }
   }
 
   // ── Values ─────────────────────────────────────────────────────────────────

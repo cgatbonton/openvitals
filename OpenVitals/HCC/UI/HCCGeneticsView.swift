@@ -15,7 +15,7 @@ struct HCCGeneticsView: View {
 
   var body: some View {
     HCCScreen {
-      HCCDetailHeader(title: "Genetics", subtitle: subtitle)
+      HCCDetailHeader(title: "Genetics", subtitle: subtitle, size: 24)
 
       if let genetics = load.value {
         if genetics.markers.isEmpty {
@@ -27,7 +27,9 @@ struct HCCGeneticsView: View {
               MarkerRow(marker: marker, showsDivider: index < genetics.markers.count - 1)
             }
           }
-          .hccCard()
+          // The one card on this page carries the good-green tint at the
+          // handoff's lighter pair, 0.08 → 0.02.
+          .hccCard(tint: HCCTheme.Color.good, tintTop: 0.08, tintBottom: 0.02)
           HCCFootnote("The same curated list the web genetics page shows for this instance.")
         }
       } else if let error = load.errorText {
@@ -62,12 +64,14 @@ private struct MarkerRow: View {
             .foregroundStyle(HCCTheme.Color.text)
           Text(marker.headline)
             .font(HCCTheme.Font.body(size: 11.5))
+            // Target 16-pt line at 11.5 pt.
+            .lineSpacing(2.2)
             .foregroundStyle(HCCTheme.Color.muted)
             .fixedSize(horizontal: false, vertical: true)
           if !marker.called {
             Text("inferred, not directly called")
               .font(HCCTheme.Font.data(size: 10))
-              .foregroundStyle(HCCTheme.Color.muted)
+              .foregroundStyle(HCCTheme.Color.muted2)
           }
         }
         Spacer(minLength: 8)
@@ -96,6 +100,6 @@ private struct MarkerRow: View {
     }
     return alleles[0] == alleles[1]
       ? ("homozygous \(genotype)", .warn)
-      : ("heterozygous \(genotype)", .accent)
+      : ("heterozygous \(genotype)", .info)
   }
 }

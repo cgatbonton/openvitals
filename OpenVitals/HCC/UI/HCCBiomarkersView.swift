@@ -18,7 +18,8 @@ struct HCCBiomarkersView: View {
 
   var body: some View {
     HCCScreen {
-      HCCDetailHeader(title: "Biomarkers", subtitle: subtitle)
+      // 24, the handoff's sub-page title scale.
+      HCCDetailHeader(title: "Biomarkers", subtitle: subtitle, size: 24)
 
       if let panels = load.value {
         if panels.panels.isEmpty {
@@ -76,8 +77,11 @@ struct HCCBiomarkersView: View {
   }
 
   private func panelCard(_ panel: HCCBiomarkerPanel) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HCCLabel(Self.categoryTitle(panel.category), size: 11)
+    // Rows inside a card are flush, separated by `HCCDivider`; the mock's only
+    // gap here is the 2 under the label. See "Card Spacing Is Stack Spacing".
+    VStack(alignment: .leading, spacing: 0) {
+      HCCLabel(Self.categoryTitle(panel.category), size: 10)
+        .padding(.bottom, 2)
       ForEach(Array(panel.metrics.enumerated()), id: \.element.slug) { index, metric in
         BiomarkerRow(metric: metric, showsDivider: index < panel.metrics.count - 1) {
           selected = metric
@@ -120,7 +124,7 @@ private struct BiomarkerRow: View {
         .frame(width: 8, height: 8)
 
       Text(metric.displayName)
-        .font(HCCTheme.Font.body(size: 12.5))
+        .font(HCCTheme.Font.body(size: 13))
         .foregroundStyle(HCCTheme.Color.text)
         .lineLimit(2)
 
@@ -131,13 +135,13 @@ private struct BiomarkerRow: View {
       Text(Self.targetText(metric))
         .font(HCCTheme.Font.data(size: 10))
         .foregroundStyle(HCCTheme.Color.muted)
-        .frame(minWidth: 56, alignment: .trailing)
+        .frame(minWidth: 48, alignment: .trailing)
 
-      Text("\u{203A}")
-        .font(HCCTheme.Font.body(size: 13))
-        .foregroundStyle(HCCTheme.Color.muted)
+      Image(systemName: "chevron.right")
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(HCCTheme.Color.chevron)
     }
-    .padding(.vertical, 7)
+    .padding(.vertical, 9)
     // The whole row is the target, not just the glyphs in it: the gaps between
     // name, value and target are the widest part of the row and a tap that
     // lands in one must still open the card.
@@ -150,7 +154,8 @@ private struct BiomarkerRow: View {
   private var valueText: some View {
     HStack(alignment: .firstTextBaseline, spacing: 3) {
       Text(metric.value.map { HCCFormat.decimal($0, abs($0) >= 100 ? 0 : 1) } ?? HCCFormat.placeholder)
-        .font(HCCTheme.Font.data(size: 12.5))
+        .font(HCCTheme.Font.display(size: 15, weight: .semibold))
+        .tracking(-0.3)
         .monospacedDigit()
         .foregroundStyle(HCCTheme.Color.text)
       if let unit = metric.unit, !unit.isEmpty, metric.value != nil {

@@ -10,7 +10,8 @@ import SwiftUI
 
 // ── Chip ─────────────────────────────────────────────────────────────────────
 
-/// `.chip` — a bordered pill with an optional coloured dot.
+/// `.chip` — a filled pill with an optional coloured dot. No border: the
+/// "Tinted" direction separates by fill, not by hairline.
 struct HCCChip: View {
   let text: String
   var dotColor: Color?
@@ -26,53 +27,65 @@ struct HCCChip: View {
         Circle().fill(dotColor).frame(width: 6, height: 6)
       }
       Text(text)
-        .font(HCCTheme.Font.data(size: 10.5, weight: .medium))
-        .tracking(0.42)
+        .font(HCCTheme.Font.data(size: 10, weight: .medium))
+        .tracking(0.4)
     }
     .foregroundStyle(HCCTheme.Color.muted)
-    .padding(.horizontal, 8)
-    .padding(.vertical, 5)
-    .overlay(Capsule().strokeBorder(HCCTheme.Color.line, lineWidth: 1))
+    .padding(.horizontal, 9)
+    .padding(.vertical, 3)
+    .background(Capsule().fill(HCCTheme.Color.control2))
   }
 }
 
 // ── Section header ───────────────────────────────────────────────────────────
 
 /// `.sec` — a display-font section title with an optional trailing control.
+///
+/// `size` is the handoff's two section scales: 18 for "My Dashboard", 15 for a
+/// section title inside a card ("Today's activities", "Tonight's sleep").
+/// Tracking follows the size, −0.4 at 18 and −0.2 at 15.
 struct HCCSectionHeader<Trailing: View>: View {
   let title: String
+  var size: CGFloat = 18
   @ViewBuilder let trailing: () -> Trailing
+
+  init(title: String, size: CGFloat = 18, @ViewBuilder trailing: @escaping () -> Trailing) {
+    self.title = title
+    self.size = size
+    self.trailing = trailing
+  }
 
   var body: some View {
     HStack(alignment: .center) {
       Text(title)
-        .font(HCCTheme.Font.display(size: 18, weight: .medium))
-        .tracking(-0.36)
+        .font(HCCTheme.Font.display(size: size, weight: .semibold))
+        .tracking(size >= 18 ? -0.4 : -0.2)
         .foregroundStyle(HCCTheme.Color.text)
       Spacer(minLength: 8)
       trailing()
     }
-    // `.sec{margin:14px 0 8px}`, less the spacing the containing stack already
-    // contributes on each side (10 above between cards, 8 below before tiles).
+    // The remainder of the mockup's larger section margin, on top of the 10 the
+    // containing stack already supplies. See "Card Spacing Is Stack Spacing".
     .padding(.top, 4)
     .padding(.bottom, 0)
   }
 }
 
 extension HCCSectionHeader where Trailing == EmptyView {
-  init(title: String) {
-    self.init(title: title) { EmptyView() }
+  init(title: String, size: CGFloat = 18) {
+    self.init(title: title, size: size) { EmptyView() }
   }
 }
 
-/// `.sec .lnk` — the muted uppercase text button beside a section title.
+/// `.sec .lnk` — the micro-label text button beside a section title, in the
+/// accent's light tint `#8CC4FF`.
 struct HCCSectionLink: View {
   let title: String
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
-      HCCLabel(title, size: 10.5)
+      HCCLabel(title, size: 10, color: HCCTheme.Color.accentText)
     }
     .buttonStyle(.plain)
   }
@@ -81,30 +94,39 @@ struct HCCSectionLink: View {
 // ── Pill ─────────────────────────────────────────────────────────────────────
 
 /// `.pill` — a tinted status word (recovery band, protocol status, evidence).
+///
+/// NOT uppercased: the handoff's pills print their text exactly as the server
+/// wrote it ("ACTIVE" is already capitals; "heterozygous CT" and "watch" are
+/// not), and a `textCase(.uppercase)` here would shout the lowercase ones.
 struct HCCPill: View {
   enum Tone {
     case good
     case warn
     case bad
     case muted
+    /// The handoff's `info` tone. `accent` is the same rendering under the name
+    /// the existing call sites already use.
+    case info
     case accent
 
+    /// The pill's text colour — the metric's LIGHT tint, not its base colour,
+    /// because the pill's ground is a 16 % wash of that same base.
     var color: Color {
       switch self {
       case .good: HCCTheme.Color.rec
       case .warn: HCCTheme.Color.warn
       case .bad: HCCTheme.Color.bad
       case .muted: HCCTheme.Color.muted
-      case .accent: HCCTheme.Color.accent
+      case .info, .accent: HCCTheme.Color.accentText
       }
     }
 
     var background: Color {
-      // CSS `color-mix(in srgb, <c> 22%, transparent)`; `.mut` is the flat line
-      // colour instead.
       switch self {
-      case .muted: HCCTheme.Color.line
-      default: color.opacity(0.22)
+      // `rgba(255,255,255,.08)` — the muted pill is white, not a hue.
+      case .muted: HCCTheme.Color.white(0.08)
+      case .info, .accent: HCCTheme.Color.accent.opacity(0.16)
+      default: color.opacity(0.16)
       }
     }
   }
@@ -112,7 +134,7 @@ struct HCCPill: View {
   let text: String
   var tone: Tone = .good
   /// An explicit colour wins over the tone — the recovery hero pill is tinted
-  /// with the band colour, which is not one of the five tones.
+  /// with the band colour, which is not one of the tones.
   var color: Color?
 
   init(_ text: String, tone: Tone = .good, color: Color? = nil) {
@@ -124,15 +146,14 @@ struct HCCPill: View {
   var body: some View {
     let foreground = color ?? tone.color
     Text(text)
-      .font(HCCTheme.Font.body(size: 10, weight: .semibold))
-      .tracking(0.8)
-      .textCase(.uppercase)
+      .font(HCCTheme.Font.data(size: 9.5))
+      .tracking(0.4)
+      .lineLimit(1)
       .foregroundStyle(foreground)
-      .padding(.horizontal, 7)
-      .padding(.vertical, 4)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 3)
       .background(
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
-          .fill(color.map { $0.opacity(0.2) } ?? tone.background)
+        Capsule().fill(color.map { $0.opacity(0.16) } ?? tone.background)
       )
   }
 }
@@ -339,20 +360,30 @@ struct HCCBand: View {
     GeometryReader { proxy in
       let width = proxy.size.width
       ZStack(alignment: .leading) {
-        Capsule().fill(HCCTheme.Color.line)
-        Rectangle()
-          .fill(HCCTheme.Color.band)
-          .frame(width: width * CGFloat(Swift.max(high - low, 0)))
-          .offset(x: width * CGFloat(low))
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
-          .fill(HCCTheme.Color.text)
-          .frame(width: 3, height: 14)
-          .offset(x: width * CGFloat(min(Swift.max(position, 0), 1)) - 1.5, y: -3)
+        // The 6-pt track, its optimal window, and the marker on top. The track
+        // and window are clipped to the same rounded rect; the marker is not,
+        // because it is taller than the track by design.
+        ZStack(alignment: .leading) {
+          RoundedRectangle(cornerRadius: 3, style: .continuous).fill(HCCTheme.Color.line)
+          Rectangle()
+            .fill(HCCTheme.Color.band)
+            .frame(width: width * CGFloat(Swift.max(high - low, 0)))
+            .offset(x: width * CGFloat(low))
+        }
+        .frame(height: 6)
+        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+
+        // A 10-pt white disc with a 2-px ring in the page ground, so the marker
+        // stays legible wherever on the track it lands.
+        Circle()
+          .fill(Color.white)
+          .frame(width: 10, height: 10)
+          .overlay(Circle().strokeBorder(HCCTheme.Color.bg, lineWidth: 2))
+          .offset(x: width * CGFloat(min(Swift.max(position, 0), 1)) - 5)
       }
-      .frame(height: 8)
-      .clipShape(Capsule().inset(by: -3))
+      .frame(height: 10)
     }
-    .frame(height: 14)
+    .frame(height: 10)
     .padding(.top, 6)
     .padding(.bottom, 2)
   }
@@ -448,23 +479,46 @@ struct HCCButtonSpec {
   /// A secondary button whose action removes something: same shape, `bad`
   /// text, so the row reads the same and the one that destroys stands out.
   var isDestructive: Bool = false
+  /// The handoff's optional 12-pt leading glyph — "Start activity" carries a
+  /// play, "Add" a plus. An SF Symbol name, or `nil` for a text-only button.
+  var systemImage: String?
 
-  init(title: String, isEnabled: Bool = true, isDestructive: Bool = false, action: @escaping () -> Void) {
+  init(
+    title: String,
+    isEnabled: Bool = true,
+    isDestructive: Bool = false,
+    systemImage: String? = nil,
+    action: @escaping () -> Void
+  ) {
     self.title = title
     self.isEnabled = isEnabled
     self.isDestructive = isDestructive
+    self.systemImage = systemImage
     self.action = action
   }
 }
 
 /// `.btns` — up to two full-width buttons, secondary left, primary right.
 struct HCCButtonRow: View {
+  /// The two shapes the handoff draws.
+  ///
+  /// `.standard` is the card CTA pair: gradient primary, `rgba(255,255,255,.07)`
+  /// secondary, 13 pt 600 sentence case, radius 14.
+  /// `.utility` is the Training control row: flatter, smaller, uppercase,
+  /// radius 12 — a row of settings rather than a call to action.
+  enum Style {
+    case standard
+    case utility
+  }
+
   var primary: HCCButtonSpec?
   var secondary: HCCButtonSpec?
+  var style: Style = .standard
 
-  init(primary: HCCButtonSpec? = nil, secondary: HCCButtonSpec? = nil) {
+  init(primary: HCCButtonSpec? = nil, secondary: HCCButtonSpec? = nil, style: Style = .standard) {
     self.primary = primary
     self.secondary = secondary
+    self.style = style
   }
 
   var body: some View {
@@ -472,39 +526,63 @@ struct HCCButtonRow: View {
       if let secondary { button(secondary, isPrimary: false) }
       if let primary { button(primary, isPrimary: true) }
     }
-    .padding(.top, 4)
   }
 
+  @ViewBuilder
   private func button(_ spec: HCCButtonSpec, isPrimary: Bool) -> some View {
+    let shape = RoundedRectangle(
+      cornerRadius: style == .utility ? HCCTheme.Radius.control : HCCTheme.Radius.button,
+      style: .continuous
+    )
     Button(action: spec.action) {
-      Text(spec.title)
-        .font(HCCTheme.Font.body(size: 11, weight: .semibold))
-        .tracking(0.88)
-        .textCase(.uppercase)
-        .foregroundStyle(
-          isPrimary ? HCCTheme.Color.bg : spec.isDestructive ? HCCTheme.Color.bad : HCCTheme.Color.text
-        )
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 11)
-        .padding(.horizontal, 8)
-        .background(
-          RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(isPrimary ? HCCTheme.Color.accent : HCCTheme.Color.card2)
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .strokeBorder(isPrimary ? HCCTheme.Color.accent : HCCTheme.Color.line, lineWidth: 1)
-        )
+      HStack(spacing: 6) {
+        if let systemImage = spec.systemImage {
+          Image(systemName: systemImage)
+            .font(.system(size: 12, weight: .semibold))
+        }
+        label(spec)
+      }
+      .foregroundStyle(foreground(spec, isPrimary: isPrimary))
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, style == .utility ? 11 : 13)
+      .padding(.horizontal, 8)
+      .background {
+        if style == .standard, isPrimary {
+          shape.fill(HCCTheme.Color.ctaGradient)
+        } else {
+          shape.fill(style == .utility ? HCCTheme.Color.control : HCCTheme.Color.control2)
+        }
+      }
     }
     .buttonStyle(.plain)
     .disabled(!spec.isEnabled)
     .opacity(spec.isEnabled ? 1 : 0.45)
   }
+
+  @ViewBuilder
+  private func label(_ spec: HCCButtonSpec) -> some View {
+    switch style {
+    case .standard:
+      Text(spec.title)
+        .font(HCCTheme.Font.body(size: 13, weight: .semibold))
+    case .utility:
+      Text(spec.title)
+        .font(HCCTheme.Font.body(size: 11, weight: .semibold))
+        .tracking(0.88)
+        .textCase(.uppercase)
+    }
+  }
+
+  private func foreground(_ spec: HCCButtonSpec, isPrimary: Bool) -> Color {
+    if spec.isDestructive { return HCCTheme.Color.bad }
+    if style == .standard, isPrimary { return HCCTheme.Color.ctaText }
+    return HCCTheme.Color.text
+  }
 }
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
 
-/// `.toggle` — a label and the mockup's 38×22 switch, over a hairline.
+/// `.toggle` — a label and the handoff's 44×26 switch, over a hairline.
 struct HCCToggleRow: View {
   let title: String
   @Binding var isOn: Bool
@@ -514,7 +592,7 @@ struct HCCToggleRow: View {
     VStack(spacing: 0) {
       HStack(spacing: 10) {
         Text(title)
-          .font(HCCTheme.Font.body(size: 13))
+          .font(HCCTheme.Font.body(size: 14, weight: .medium))
           .foregroundStyle(HCCTheme.Color.text)
         Spacer(minLength: 8)
         HCCSwitch(isOn: $isOn)
@@ -529,49 +607,71 @@ struct HCCToggleRow: View {
   }
 }
 
-/// `.sw` — the pill switch, drawn rather than using `Toggle` so it matches.
+/// `.sw` — the 44×26 pill switch, drawn rather than using `Toggle` so it
+/// matches: CTA gradient when on, `rgba(255,255,255,.08)` when off, white knob.
 struct HCCSwitch: View {
   @Binding var isOn: Bool
 
   var body: some View {
     ZStack(alignment: isOn ? .trailing : .leading) {
       Capsule()
-        .fill(isOn ? HCCTheme.Color.accent : HCCTheme.Color.line)
-        .frame(width: 38, height: 22)
+        .fill(HCCTheme.Color.white(0.08))
+        .overlay {
+          if isOn { Capsule().fill(HCCTheme.Color.ctaGradient) }
+        }
+        .frame(width: 44, height: 26)
       Circle()
-        .fill(isOn ? HCCTheme.Color.bg : HCCTheme.Color.text.opacity(0.6))
-        .frame(width: 16, height: 16)
-        .padding(.horizontal, 3)
+        .fill(Color.white)
+        .frame(width: 22, height: 22)
+        .padding(.horizontal, 2)
     }
-    .frame(width: 38, height: 22)
+    .frame(width: 44, height: 26)
     .animation(.easeOut(duration: 0.15), value: isOn)
   }
 }
 
+/// The checkbox itself, so a screen that needs one outside a row (the Training
+/// set table's 5-column grid) draws the same box rather than a near-miss.
+///
+/// Unchecked: transparent behind a 1-px `#3A4560` stroke. Checked: the CTA
+/// gradient with an 11-pt bold checkmark in `#070B14`.
+struct HCCCheckbox: View {
+  let isOn: Bool
+  var size: CGFloat = 22
+  var radius: CGFloat = 7
+
+  var body: some View {
+    let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+    return ZStack {
+      if isOn {
+        shape.fill(HCCTheme.Color.ctaGradient)
+        Image(systemName: "checkmark")
+          .font(.system(size: 11, weight: .bold))
+          .foregroundStyle(HCCTheme.Color.ctaText)
+      } else {
+        shape.strokeBorder(HCCTheme.Color.checkboxStroke, lineWidth: 1)
+      }
+    }
+    .frame(width: size, height: size)
+  }
+}
+
 /// `.check` — a square checkbox, a label, and an optional right-hand meta note.
+///
+/// `size`/`radius` are the handoff's two boxes: 22/7 for a dose row, 20/6 for a
+/// Training set row.
 struct HCCCheckRow: View {
   let title: String
   @Binding var isOn: Bool
   var meta: String?
   var showsDivider: Bool = true
+  var size: CGFloat = 22
+  var radius: CGFloat = 7
 
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: 10) {
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
-          .fill(isOn ? HCCTheme.Color.accent : Color.clear)
-          .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-              .strokeBorder(isOn ? HCCTheme.Color.accent : HCCTheme.Color.muted, lineWidth: 1.5)
-          )
-          .overlay {
-            if isOn {
-              Image(systemName: "checkmark")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(HCCTheme.Color.bg)
-            }
-          }
-          .frame(width: 20, height: 20)
+        HCCCheckbox(isOn: isOn, size: size, radius: radius)
         Text(title)
           .font(HCCTheme.Font.body(size: 13))
           .foregroundStyle(HCCTheme.Color.text)
@@ -593,16 +693,35 @@ struct HCCCheckRow: View {
 }
 
 /// `.menu .it` — a tappable settings row with an optional right-hand value.
+///
+/// The chevron appears ONLY when the row navigates. A chevron on a row that
+/// does nothing is a promise the row cannot keep, which is why it follows
+/// `action` rather than a flag a caller could set wrong.
 struct HCCMenuRow: View {
   let title: String
   var detail: String?
+  /// More's account card prints its detail in the recovery tint rather than
+  /// muted. The default is the muted meta colour every other row uses.
+  var detailColor: Color = HCCTheme.Color.muted
   var showsDivider: Bool = true
+  /// Overrides the "chevron follows `action`" rule for the one row that acts
+  /// without navigating — More's Sign out, which the design draws bare.
+  var showsChevron: Bool?
   var action: (() -> Void)?
 
-  init(title: String, detail: String? = nil, showsDivider: Bool = true, action: (() -> Void)? = nil) {
+  init(
+    title: String,
+    detail: String? = nil,
+    detailColor: Color = HCCTheme.Color.muted,
+    showsDivider: Bool = true,
+    showsChevron: Bool? = nil,
+    action: (() -> Void)? = nil
+  ) {
     self.title = title
     self.detail = detail
+    self.detailColor = detailColor
     self.showsDivider = showsDivider
+    self.showsChevron = showsChevron
     self.action = action
   }
 
@@ -610,16 +729,21 @@ struct HCCMenuRow: View {
     VStack(spacing: 0) {
       HStack(spacing: 10) {
         Text(title)
-          .font(HCCTheme.Font.body(size: 13.5))
+          .font(HCCTheme.Font.body(size: 14, weight: .medium))
           .foregroundStyle(HCCTheme.Color.text)
         Spacer(minLength: 8)
         if let detail {
           Text(detail)
             .font(HCCTheme.Font.data(size: 11.5))
-            .foregroundStyle(HCCTheme.Color.muted)
+            .foregroundStyle(detailColor)
+        }
+        if showsChevron ?? (action != nil) {
+          Image(systemName: "chevron.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(HCCTheme.Color.chevron)
         }
       }
-      .padding(.vertical, 11)
+      .padding(.vertical, 13)
       .contentShape(Rectangle())
       .onTapGesture { action?() }
       if showsDivider { HCCDivider() }
@@ -627,7 +751,7 @@ struct HCCMenuRow: View {
   }
 }
 
-/// The 1-pt `--line` rule that separates rows inside a card.
+/// The 1-pt `rgba(255,255,255,.06)` rule that separates rows inside a card.
 struct HCCDivider: View {
   var body: some View {
     Rectangle()
@@ -674,11 +798,13 @@ struct HCCComingSoonSheet: View {
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 4) {
           Text(feature)
-            .font(HCCTheme.Font.display(size: 20, weight: .medium))
-            .tracking(-0.4)
+            .font(HCCTheme.Font.display(size: 24, weight: .semibold))
+            .tracking(-0.6)
             .foregroundStyle(HCCTheme.Color.text)
           Text("Arrives in a later phase")
-            .font(HCCTheme.Font.body(size: 11.5))
+            .font(HCCTheme.Font.data(size: 10.5))
+            .tracking(0.5)
+            .textCase(.uppercase)
             .foregroundStyle(HCCTheme.Color.muted)
         }
         Spacer(minLength: 8)
@@ -686,14 +812,10 @@ struct HCCComingSoonSheet: View {
           Image(systemName: "xmark")
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(HCCTheme.Color.text)
-            .frame(width: 32, height: 32)
+            .frame(width: 34, height: 34)
             .background(
-              RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(HCCTheme.Color.card)
-            )
-            .overlay(
-              RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(HCCTheme.Color.line, lineWidth: 1)
+              RoundedRectangle(cornerRadius: HCCTheme.Radius.control, style: .continuous)
+                .fill(HCCTheme.Color.control)
             )
         }
         .buttonStyle(.plain)

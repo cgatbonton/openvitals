@@ -19,8 +19,11 @@ enum HCCRingKind {
   func colors(recoveryBand band: HCCRecoveryBand?) -> (Color, Color) {
     switch self {
     case .rec: band?.gradient ?? HCCTheme.Color.orbUnknown
-    case .sleep: (HCCTheme.Color.sleep, HCCTheme.Color.hex(0x2E6BE0))
-    case .strain: (HCCTheme.Color.strain, HCCTheme.Color.hex(0x5A8BFF))
+    case .sleep: (HCCTheme.Color.sleep, HCCTheme.Color.ringSleepEnd)
+    // The strain RING stays cyan → indigo even though the strain SURFACE colour
+    // is now the indigo end. Its own tokens, so a change to one cannot silently
+    // repaint the other.
+    case .strain: (HCCTheme.Color.ringStrainStart, HCCTheme.Color.ringStrainEnd)
     }
   }
 
@@ -67,6 +70,13 @@ struct HCCRing: View {
   /// gradient. `nil` on a recovery ring means "no band to show" and draws the
   /// muted pair — the same thing a missing value does.
   var band: HCCRecoveryBand?
+  /// How long the fill waits before it runs. Home staggers its three rings by
+  /// 0.1 s (0 / 0.1 / 0.2), which is the design's own timing.
+  var animationDelay: Double = 0
+
+  /// How far the arc is drawn right now. Starts at zero and animates up to
+  /// `clampedProgress` on appear, and again whenever the value changes.
+  @State private var drawn: Double = 0
 
   init(
     progress: Double,
@@ -78,7 +88,8 @@ struct HCCRing: View {
     unit: String? = nil,
     sub: String? = nil,
     target: Double? = nil,
-    band: HCCRecoveryBand? = nil
+    band: HCCRecoveryBand? = nil,
+    animationDelay: Double = 0
   ) {
     self.progress = progress
     self.kind = kind
@@ -90,6 +101,7 @@ struct HCCRing: View {
     self.sub = sub
     self.target = target
     self.band = band
+    self.animationDelay = animationDelay
   }
 
   // ── Geometry ───────────────────────────────────────────────────────────────
@@ -97,8 +109,11 @@ struct HCCRing: View {
   private var radius: CGFloat { (size / 2) - stroke / 2 - (ticks ? 12 : 2) }
   private var center: CGPoint { CGPoint(x: size / 2, y: size / 2) }
   private var clampedProgress: Double { min(max(progress, 0.02), 1) }
-  private var valueFontSize: CGFloat { size * 0.27 }
-  private var unitFontSize: CGFloat { valueFontSize * 0.42 }
+  /// 28 pt at the handoff's 100-pt ring, kept size-relative so the detail
+  /// screens' larger rings scale with it.
+  private var valueFontSize: CGFloat { size * 0.28 }
+  /// 11 pt at 28.
+  private var unitFontSize: CGFloat { valueFontSize * 0.393 }
   private var subFontSize: CGFloat { max(7.5, size * 0.075) }
 
   /// SVG places text by BASELINE; SwiftUI places it by the centre of its line
@@ -116,9 +131,20 @@ struct HCCRing: View {
       centreText
     }
     .frame(width: size, height: size)
+    // The fill runs once on appear and again if the value changes under it —
+    // a re-scored night must not leave a stale arc on screen.
+    .onAppear { runFill() }
+    .onChange(of: clampedProgress) { _, _ in runFill() }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(kind.accessibilityName)
     .accessibilityValue(accessibilityValue)
+  }
+
+  /// ~1.1 s ease-out, after `animationDelay`.
+  private func runFill() {
+    withAnimation(.easeOut(duration: 1.1).delay(animationDelay)) {
+      drawn = clampedProgress
+    }
   }
 
   private var accessibilityValue: String {
@@ -171,7 +197,7 @@ struct HCCRing: View {
       endPoint: .bottomTrailing
     )
     let shape = Circle()
-      .trim(from: 0, to: clampedProgress)
+      .trim(from: 0, to: drawn)
       .stroke(gradient, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
       .frame(width: radius * 2, height: radius * 2)
       .rotationEffect(.degrees(-90))
@@ -208,14 +234,15 @@ struct HCCRing: View {
     return ZStack {
       HStack(alignment: .firstTextBaseline, spacing: 0) {
         Text(value ?? "--")
-          .font(HCCTheme.Font.display(size: valueFontSize, weight: .medium))
+          .font(HCCTheme.Font.display(size: valueFontSize, weight: .semibold))
           .foregroundStyle(HCCTheme.Color.text)
-          .tracking(-valueFontSize * 0.02)
+          // −0.8 at the handoff's 28-pt numeral.
+          .tracking(-valueFontSize * 0.0286)
         // A unit next to `--` would read as a scale for a number that is not
         // there, so it is dropped with the value.
         if let unit, value != nil {
           Text(unit)
-            .font(HCCTheme.Font.body(size: unitFontSize, weight: .medium))
+            .font(HCCTheme.Font.body(size: unitFontSize, weight: .semibold))
             .foregroundStyle(HCCTheme.Color.muted)
         }
       }
@@ -250,20 +277,33 @@ struct HCCRing: View {
 
 // ── Labelled ring ────────────────────────────────────────────────────────────
 
-/// A ring with the mockup's `.ringwrap` caption under it — the Home row's
-/// tappable unit.
+/// A ring with the handoff's metric chip under it — the Home row's tappable
+/// unit.
+///
+/// The caption is no longer a muted micro-label with a chevron: it is a pill in
+/// the metric's own colour (`rgba(metric,.18)` behind the metric's light tint),
+/// which is what ties a ring to the card that carries the same tint further down
+/// the screen. `tint` is the metric's base colour and `tintText` its light
+/// tint — both passed in, because a ring wrap has no way to know which metric it
+/// is drawing and guessing one would be the wrong colour on a bad day.
 struct HCCRingWrap: View {
   let title: String
   let ring: HCCRing
-  var showsChevron: Bool = true
+  let tint: Color
+  let tintText: Color
 
   var body: some View {
-    VStack(spacing: 6) {
+    VStack(spacing: 12) {
       ring
-      HCCLabel(showsChevron ? "\(title) ›" : title)
+      Text(title)
+        .hccLabelStyle(size: 10, color: tintText)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(tint.opacity(0.18)))
     }
     .frame(maxWidth: .infinity)
-    .padding(.vertical, 4)
+    .padding(.top, 10)
+    .padding(.bottom, 8)
     .contentShape(Rectangle())
   }
 }

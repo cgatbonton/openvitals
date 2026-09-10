@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The mockup's `.fab`: a 50-pt gradient circle bottom-right, above the tab bar.
+/// The handoff's `.fab`: a 50-pt gradient square with 16-pt corners,
+/// bottom-right, floating 14 above the tab bar.
 ///
 /// It sits in the shell rather than on a screen, exactly as the mockup has it —
 /// the Coach is asked from wherever the owner already is, and the sheet it opens
@@ -16,19 +17,16 @@ struct HCCCoachFAB: View {
   var body: some View {
     Button(action: action) {
       Image(systemName: "bubble.left")
-        .font(.system(size: 21, weight: .regular))
-        .foregroundStyle(HCCTheme.Color.hex(0x07131F))
-        .frame(width: 50, height: 50)
+        .font(.system(size: 22, weight: .regular))
+        .foregroundStyle(HCCTheme.Color.fabGlyph)
+        .frame(width: HCCTheme.Spacing.fabSize, height: HCCTheme.Spacing.fabSize)
         .background(
-          Circle().fill(
-            LinearGradient(
-              colors: [HCCTheme.Color.hex(0x5AA9FF), HCCTheme.Color.hex(0x3DF0B0)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
+          RoundedRectangle(cornerRadius: HCCTheme.Radius.tile, style: .continuous)
+            .fill(HCCTheme.Color.fabGradient)
         )
-        .shadow(color: HCCTheme.Color.accent.opacity(0.7), radius: 12, x: 0, y: 8)
+        // `0 8 20 rgba(90,169,255,.4)`; SwiftUI's radius is roughly half CSS's
+        // blur, so 20 becomes 10.
+        .shadow(color: HCCTheme.Color.accent.opacity(0.4), radius: 10, x: 0, y: 8)
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Coach")
