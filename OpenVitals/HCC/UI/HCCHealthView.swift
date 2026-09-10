@@ -24,6 +24,7 @@ struct HCCHealthView: View {
     case insights
     case genetics
     case protocols
+    case wearables
   }
 
   var body: some View {
@@ -48,7 +49,7 @@ struct HCCHealthView: View {
   private var content: some View {
     #if DEBUG
     // HCC: `HCC_DEBUG_OPEN_SCREEN=recovery|sleep|strain|health|biomarkers|
-    // insights|genetics|protocols` opens one screen straight from the launch
+    // insights|genetics|protocols|wearables` opens one screen straight from the launch
     // environment, so each can be screenshotted against the mockup without UI
     // automation (`simctl` cannot tap). `HCC_DEBUG_OPEN_DATE` picks the day for
     // the three detail screens. DEBUG only — compiled out of Release, so a
@@ -118,6 +119,7 @@ struct HCCHealthLanding: View {
   @StateObject private var weekly = HCCPageLoad<HCCWeeklyInsightsResponse>()
   @StateObject private var genetics = HCCPageLoad<HCCGenetics>()
   @StateObject private var protocolList = HCCPageLoad<HCCProtocolsResponse>()
+  @StateObject private var deck = HCCPageLoad<HCCDeckResponse>()
 
   /// The key vital whose detail sheet is open — the same card the Biomarkers
   /// screen opens, and the same content the web app shows when one of its
@@ -138,12 +140,14 @@ struct HCCHealthLanding: View {
 
   var body: some View {
     HCCScreen {
-      // The subtitle names the four cards below it, in their order — the mock's
-      // `BIOMARKERS · INSIGHTS · GENETICS · PROTOCOLS`. `HCCDetailHeader`
-      // uppercases it and sets it in Plex Mono itself.
+      // The subtitle names the cards below it, in their order. The handoff's
+      // line stopped at Protocols because it drew four; Wearables is the fifth
+      // and belongs in it — a header that lists four of five reads as the
+      // complete set. `HCCDetailHeader` uppercases it, sets it in Plex Mono,
+      // and shrinks it slightly rather than wrapping.
       HCCDetailHeader(
         title: "Health",
-        subtitle: "Biomarkers · Insights · Genetics · Protocols",
+        subtitle: "Biomarkers · Insights · Genetics · Protocols · Wearables",
         showsBack: false
       )
       grid
@@ -169,6 +173,7 @@ struct HCCHealthLanding: View {
       case .insights: HCCInsightsView(store: store)
       case .genetics: HCCGeneticsView(store: store)
       case .protocols: HCCProtocolsView(store: store)
+      case .wearables: HCCWearablesView(store: store)
       }
     }
     // Two tasks, not one: the four cards' counts and the monitor's streams come
@@ -180,41 +185,57 @@ struct HCCHealthLanding: View {
   }
 
   private var grid: some View {
-    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-      // The handoff's tint per page: Biomarkers sleep-blue, Insights
-      // recovery-cyan, Genetics good-green, Protocols strain-indigo.
+    // 8 between the tiles AND between the grid and the full-width fifth card —
+    // one spacing for the whole block, per "Card Spacing Is Stack Spacing".
+    VStack(spacing: 8) {
+      LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+        // The handoff's tint per page: Biomarkers sleep-blue, Insights
+        // recovery-cyan, Genetics good-green, Protocols strain-indigo.
+        HealthCard(
+          page: .biomarkers,
+          symbol: "testtube.2",
+          tint: HCCTheme.Color.sleep,
+          tintText: HCCTheme.Color.sleepText,
+          title: "Biomarkers",
+          subtitle: biomarkersSubtitle
+        )
+        HealthCard(
+          page: .insights,
+          symbol: "sparkles",
+          tint: HCCTheme.Color.recovery,
+          tintText: HCCTheme.Color.recoveryText,
+          title: "Insights",
+          subtitle: insightsSubtitle
+        )
+        // iOS 26 ships no `dna` symbol, so the handoff's fallback stands.
+        HealthCard(
+          page: .genetics,
+          symbol: "waveform.path.ecg",
+          tint: HCCTheme.Color.good,
+          tintText: HCCTheme.Color.goodText,
+          title: "Genetics",
+          subtitle: geneticsSubtitle
+        )
+        HealthCard(
+          page: .protocols,
+          symbol: "shippingbox",
+          tint: HCCTheme.Color.strain,
+          tintText: HCCTheme.Color.strainText,
+          title: "Protocols",
+          subtitle: protocolsSubtitle
+        )
+      }
+
+      // The fifth page breaks the handoff's 2x2, so it spans the full width
+      // rather than sitting as a lone half-card beside a hole. Violet is the
+      // one palette colour the other four had not claimed.
       HealthCard(
-        page: .biomarkers,
-        symbol: "testtube.2",
-        tint: HCCTheme.Color.sleep,
-        tintText: HCCTheme.Color.sleepText,
-        title: "Biomarkers",
-        subtitle: biomarkersSubtitle
-      )
-      HealthCard(
-        page: .insights,
-        symbol: "sparkles",
-        tint: HCCTheme.Color.recovery,
-        tintText: HCCTheme.Color.recoveryText,
-        title: "Insights",
-        subtitle: insightsSubtitle
-      )
-      // iOS 26 ships no `dna` symbol, so the handoff's fallback stands.
-      HealthCard(
-        page: .genetics,
-        symbol: "waveform.path.ecg",
-        tint: HCCTheme.Color.good,
-        tintText: HCCTheme.Color.goodText,
-        title: "Genetics",
-        subtitle: geneticsSubtitle
-      )
-      HealthCard(
-        page: .protocols,
-        symbol: "shippingbox",
-        tint: HCCTheme.Color.strain,
-        tintText: HCCTheme.Color.strainText,
-        title: "Protocols",
-        subtitle: protocolsSubtitle
+        page: .wearables,
+        symbol: "waveform.path",
+        tint: HCCTheme.Color.violet,
+        tintText: HCCTheme.Color.violetText,
+        title: "Wearables",
+        subtitle: wearablesSubtitle
       )
     }
   }
@@ -247,6 +268,19 @@ struct HCCHealthLanding: View {
     let active = response.protocols.filter { $0.status == "ACTIVE" }.count
     let planned = response.protocols.filter { $0.status == "PLANNED" }.count
     return "\(active) active · \(planned) planned"
+  }
+
+  /// How many streams the deck carries, and how many of them the server is
+  /// currently watching or flagging. "0 watching" would be a claim the count
+  /// alone does not make, so a quiet deck just says how many streams it has.
+  private var wearablesSubtitle: String {
+    guard let response = deck.value else { return pendingText(deck.isPending) }
+    let streams = response.deck.count
+    let watching = response.deck.filter {
+      $0.role != "confounder" && ($0.verdict == "watch" || $0.verdict == "flag")
+    }.count
+    let label = streams == 1 ? "1 stream" : "\(streams) streams"
+    return watching > 0 ? "\(label) · \(watching) watching" : label
   }
 
   /// "Loading" and "not loaded" are different answers; neither is a count.
@@ -387,6 +421,7 @@ struct HCCHealthLanding: View {
     await weekly.loadIfNeeded { try await HCCSession.shared.client.weeklyInsights(limit: 1) }
     await genetics.loadIfNeeded { try await HCCSession.shared.client.genetics() }
     await protocolList.loadIfNeeded { try await HCCSession.shared.client.protocols() }
+    await deck.loadIfNeeded { try await HCCSession.shared.client.deck() }
   }
 }
 
@@ -637,6 +672,7 @@ enum HCCDebugScreen: String {
   case insights
   case genetics
   case protocols
+  case wearables
   // HCC: P3-H — the Apple Watch upload sheet lives on the More screen, which
   // this workstream does not own; this makes it reachable for verification.
   case watchUpload
@@ -682,6 +718,7 @@ struct HCCDebugScreenHost: View {
     case .insights: HCCInsightsView(store: store)
     case .genetics: HCCGeneticsView(store: store)
     case .protocols: HCCProtocolsView(store: store)
+    case .wearables: HCCWearablesView(store: store)
     // HCC: P3-H
     case .watchUpload: HCCWatchUploadSheet(uploader: HCCHealthKitUploader.shared)
     }

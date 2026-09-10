@@ -395,7 +395,7 @@ SIMCTL_CHILD_HCC_DEBUG_SMOKE=1 \
 | `HCC_DEBUG_OPEN_DATE=YYYY-MM-DD` | Home selects that day on launch (cloud mode) |
 | `HCC_DEBUG_OPEN_ROUTE=<HealthRoute>` | Home pushes that detail screen on launch (`sleep`, `recovery`, `strain`, `healthMonitor`) — screenshots without UI automation |
 | `HCC_DEBUG_OPEN_SCREEN=gallery` | Home shows `HCCComponentGallery` — every design-system component with sample props |
-| `HCC_DEBUG_OPEN_SCREEN=recovery\|sleep\|strain\|health\|biomarkers\|insights\|genetics\|protocols` | The Health tab shows that one screen instead of its landing (`HCCHealthView`), so each can be screenshotted without UI automation. Pair with `HCC_DEBUG_OPEN_TAB=health` to land on that tab, and with `HCC_DEBUG_OPEN_DATE` for the three detail screens. Value sets are disjoint from the More tab's (`more`, `devices`, `customize`, `alarm`, `addActivity`, `activity:<id>`) and from `gallery` |
+| `HCC_DEBUG_OPEN_SCREEN=recovery\|sleep\|strain\|health\|biomarkers\|insights\|genetics\|protocols\|wearables` | The Health tab shows that one screen instead of its landing (`HCCHealthView`), so each can be screenshotted without UI automation. Pair with `HCC_DEBUG_OPEN_TAB=health` to land on that tab, and with `HCC_DEBUG_OPEN_DATE` for the three detail screens. Value sets are disjoint from the More tab's (`more`, `devices`, `customize`, `alarm`, `addActivity`, `activity:<id>`) and from `gallery` |
 | `HCC_DEBUG_GALLERY_ANCHOR=<section>` | Scrolls the gallery to `rings`, `chips`, `charts`, `rows`, `controls` or `biomarker` on appear, so each section can be screenshotted without UI automation. `biomarker` additionally PRESENTS `HCCBiomarkerDetailSheet` over sample props — the sheet is otherwise only reachable by tapping a row on a screen that needs a signed-in instance |
 | `HCC_DEBUG_OPEN_BIOMARKER=<slug>` | On the Biomarkers screen, presents that marker's detail sheet once the panels have loaded. Pair with `HCC_DEBUG_OPEN_TAB=health HCC_DEBUG_OPEN_SCREEN=biomarkers`. Needs a signed-in instance that actually has that marker; the gallery anchor above is the no-server alternative |
 | `HCC_DEBUG_HOME_ANCHOR=<block>` | Scrolls cloud Home to `rings`, `activities`, `tonight` or `dashboard` on appear — Home is about two screens tall and `simctl` cannot scroll |
@@ -437,14 +437,46 @@ exactly its height).
 installed — reaching into another instance for a sub-view left them unobserved
 and every card stuck on "Loading…"). Top to bottom:
 
-1. the four reference cards — **Biomarkers · Insights · Genetics · Protocols** —
-   each with a counted subtitle and a push into its page;
+1. the five reference cards — **Biomarkers · Insights · Genetics · Protocols ·
+   Wearables** — each with a counted subtitle and a push into its page. The
+   first four are the handoff's 2x2; **Wearables** (added 2026-09-10) is the
+   fifth and spans the full width beneath them rather than sitting as a lone
+   half-card, and it is the one card whose tint is not a metric colour — violet,
+   the only palette colour the other four had not claimed;
 2. **Key vitals**, the web command page's curated six;
 3. the **Health monitor**, the wearable streams over their optimal bands;
 4. **Active insights**, the web command page's "Active flags".
 
 The order is Chris's (2026-09-06): key vitals above the monitor, active insights
 below it.
+
+### Wearables Is Not A Second Biomarkers Page
+
+`HCCWearablesView` is the web `/wearables` deck, off `GET /api/mobile/v1/deck` —
+whose DTOs and client method had existed since the read API landed with nothing
+drawing them. It asks a DIFFERENT question from every other Health page, and the
+screen says so in a footnote because the two are easy to conflate:
+
+- **Biomarkers** grades a value against the metric catalog's **optimal target** —
+  "is this number where it should be".
+- **Wearables** scores each stream's last 14 days against **its own rolling
+  baseline**, in standard deviations of this owner's own noise — "has this number
+  moved". A stream can sit far from its optimal target and read Steady here, and
+  one inside its target can Flag.
+
+Nothing on that screen is a target grading, and nothing on it may be presented as
+one. Its verdicts (`steady` / `watch` / `flag` / `calibrating` / `no-data`), its
+σ, its baselines and its wear coverage are all the server's; `HCCWearableVerdict`
+is the single home for the five words and their tones, and "steady" is the ACCENT
+tone rather than green on purpose — green would read as a health verdict, which
+this scale never gives.
+
+Two rendering rules the payload forces, both instances of **Never Fabricate A
+Value**: `series` is the stream's whole history and outlives the 14-day window,
+so the sparkline draws only when `current` is non-nil — otherwise a stream that
+stopped reporting shows a trend line under a row that says "No data"; and a wear
+percentage is suppressed when `spanDays` is 0, because a percentage over a zero-
+day span is not a measurement (it rendered as "0% wear" for a manual source).
 
 **Both new cards ride `/home`, which the phone already decoded and drew
 nowhere.** `HCCHome.vitals` and `HCCHome.flags` were on the wire and on

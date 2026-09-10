@@ -77,6 +77,13 @@ enum HCCTheme {
     /// `#9DB4FF` — strain's light tint.
     static let strainText = hex(0x9DB4FF)
 
+    /// `#8B7BFF` — violet. Already in the palette as the recovery orb's primed
+    /// end and the Home insight card's second stop; named here because the
+    /// Wearables page needs a fifth card tint and the other four are spoken for.
+    static let violet = hex(0x8B7BFF)
+    /// `#B3A6FF` — violet's light tint.
+    static let violetText = hex(0xB3A6FF)
+
     /// `#3DF0B0` — the generic "good" green.
     static let rec = hex(0x3DF0B0)
     /// `#3DF0B0`, same token under the name the status vocabulary uses.
