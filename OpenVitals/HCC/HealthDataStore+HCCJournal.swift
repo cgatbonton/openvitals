@@ -187,6 +187,12 @@ extension HealthDataStore {
     state.lastError = nil
     state.doseWarning = nil
 
+    // Stamped HERE, at the tap, and never left to the server's `now()`. See
+    // `HCCDoseLogBody.takenAt` and `hccDoseTakenAt` for the two days this
+    // otherwise files a dose on: the day the request finally lands, and today
+    // when the owner is filling in a back day.
+    let takenAt = Self.hccDoseTakenAt(day: day)
+
     defer { state.pendingDoses[due.id] = nil }
     do {
       let result = try await HCCSession.shared.client.logJournalDose(
@@ -194,7 +200,8 @@ extension HealthDataStore {
           protocolId: due.protocolId,
           productId: due.productId,
           amount: due.amount,
-          unit: due.unit
+          unit: due.unit,
+          takenAt: takenAt
         )
       )
       // Reconcile from the server's own row rather than a fabricated one: the
@@ -237,6 +244,28 @@ extension HealthDataStore {
       hccJournalRecord(error, on: state)
       return false
     }
+  }
+
+  /// The instant a dose ticked on `day` should be recorded at.
+  ///
+  /// Today's screen stamps the tap itself. A BACK day cannot — "now" is not a
+  /// time on that day at all, and a dose ticked while catching up on yesterday
+  /// would land on today, where it was neither due nor taken. Midday of the
+  /// civil day is used instead: it is inside that day's bounds in the instance's
+  /// zone by a twelve-hour margin, so no clock change can push it into a
+  /// neighbour. The journal's whole day navigator exists to make a missed day
+  /// fixable, and a fix that files itself under the wrong day is not one.
+  ///
+  /// A day key the calendar cannot read falls back to the tap, which is the same
+  /// behaviour as before this existed.
+  static func hccDoseTakenAt(day: String) -> String {
+    if day == hccDayKey(Date()) { return HCCTime.isoInstant(Date()) }
+    guard let midnight = hccLocalDate(fromDayKey: day),
+          let midday = hccInstanceCalendar.date(byAdding: .hour, value: 12, to: midnight)
+    else {
+      return HCCTime.isoInstant(Date())
+    }
+    return HCCTime.isoInstant(midday)
   }
 
   private func hccJournalRecord(_ error: Error, on state: HCCJournalState) {

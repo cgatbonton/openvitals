@@ -106,7 +106,7 @@ struct HCCDueDose: Decodable, Equatable, Identifiable {
 /// `anytime` — an unrecognised value must surface as unscheduled, never be
 /// dropped from the card or filed under a meal it was not assigned to.
 enum HCCDoseSlot: String, CaseIterable {
-  case morning, lunch, dinner, prebed, anytime
+  case prebreakfast, morning, lunch, dinner, prebed, anytime
 
   init(server: String?) {
     self = server.flatMap(HCCDoseSlot.init(rawValue:)) ?? .anytime
@@ -114,6 +114,10 @@ enum HCCDoseSlot: String, CaseIterable {
 
   var label: String {
     switch self {
+    // The one glass of water taken BEFORE food, ahead of the with-breakfast
+    // pills (Chris, 2026-09-12). The morning-FASTED injections are not here;
+    // they stay under Morning.
+    case .prebreakfast: "Pre-breakfast"
     // "Morning", not "Breakfast": the slot holds both the supplements taken
     // WITH breakfast and the GH shots taken morning-FASTED, before food.
     case .morning: "Morning"
@@ -202,11 +206,24 @@ struct HCCJournalDayBody: Encodable {
 /// `POST /api/journal/doses`. Amount and unit are sent from the due line so the
 /// server draws the same stock the protocol declares; omitting them would make
 /// the server re-derive them, which is the same answer by a longer road.
+///
+/// `takenAt` is the instant of the TAP, not of the request. Without it the
+/// server stamps the dose `now()` — the moment the POST is *received* — and a
+/// request that leaves late files the dose on the wrong day. That is not
+/// hypothetical: the session waits for connectivity rather than failing fast
+/// (`HCCAPIClient`), so a dose ticked at bedtime on a dying connection, with the
+/// phone then locked, was delivered when the app next came to the foreground the
+/// following MORNING and recorded against that day. The owner opened the journal
+/// to find the previous evening's Dinner and Pre-bed rows already checked, and
+/// unchecking them deleted the real dose from the record (Chris, 2026-09-12).
+/// ISO-8601 with a zone, which is what the route's `z.string().datetime()`
+/// accepts and what the server parses straight into the timestamp.
 struct HCCDoseLogBody: Encodable {
   let protocolId: String
   var productId: String?
   var amount: Double?
   var unit: String?
+  var takenAt: String?
 }
 
 /// `POST /api/journal/doses` → the created log, whether stock was drawn down,
