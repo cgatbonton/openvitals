@@ -69,6 +69,20 @@ struct HCCJournalEntry: Decodable, Equatable {
 /// never parsed into a number. `amount`/`unit` are the structured draw a
 /// product supplies. Exactly one of the two carries the dose.
 struct HCCDueDose: Decodable, Equatable, Identifiable {
+  /// The row's identity, decided SERVER-side. `protocolId|productId` for an
+  /// ordinary row — byte-for-byte the string this app used to build for itself,
+  /// so no existing row's identity moved when the field landed — and
+  /// `protocolId|productId|slot` for one of the lines a pair SPLITS into.
+  ///
+  /// The split is why this exists (server `splitBySlots`, 2026-09-12): a dose
+  /// line whose note names as many times of day as the day owes doses is now
+  /// emitted as one row per time — Floratil and nitazoxanide, "Breakfast and
+  /// dinner", arrive as a Morning row and a Dinner row off the same pair. The
+  /// pair therefore stopped being unique, and two rows sharing an identity in a
+  /// `ForEach` is one row on screen.
+  ///
+  /// Optional only because an older instance sends no key; see `id`.
+  let key: String?
   let protocolId: String
   let protocolTitle: String
   /// What the row is called, decided SERVER-side: the product, or for a
@@ -87,15 +101,20 @@ struct HCCDueDose: Decodable, Equatable, Identifiable {
   /// `daily` or `cycling`. A cycling product skips days by design, so a blank
   /// day on one must not read as a missed dose.
   let cadence: String
-  /// When in the day it is taken: `morning` | `lunch` | `dinner` | `prebed` |
-  /// `anytime`. Derived SERVER-side from the dose link's note, so this app and
+  /// When in the day it is taken: `prebreakfast` | `morning` | `lunch` |
+  /// `dinner` | `prebed` | `anytime`. Derived SERVER-side from the dose link's note, so this app and
   /// the web page bucket the schedule identically rather than each parsing the
   /// same prose. Decoded leniently — an older instance sends no slot at all.
   let slot: String?
 
-  /// The (protocol, product) pair a dose belongs to. The server keys taken
-  /// counts on the same pair, so this is the one identity the UI needs.
-  var id: String { "\(protocolId)|\(productId ?? "")" }
+  /// What the card identifies this row by: the server's `key`, with the old
+  /// local formula standing in only for an instance too old to send one.
+  ///
+  /// `dosesCard`'s `ForEach` is keyed on this, so it is the thing that keeps the
+  /// two halves of a split pair rendering as two rows. It is NOT how a log is
+  /// matched to a row: a `DoseLog` carries no slot and belongs to the PAIR, so
+  /// that lookup goes through `HCCJournalDay.logs(forProtocolId:productId:)`.
+  var id: String { key ?? "\(protocolId)|\(productId ?? "")" }
 
   var isCycling: Bool { cadence == "cycling" }
 }
@@ -150,9 +169,6 @@ struct HCCDoseLog: Decodable, Equatable, Identifiable {
   let takenAt: String
   let notes: String?
   let inventoryDepleted: Bool
-
-  /// Same pairing as `HCCDueDose.id`, so a log can be matched to its due line.
-  var dueKey: String { "\(protocolId)|\(productId ?? "")" }
 }
 
 /// `GET /api/journal/day/{date}` and `PUT` of the same path both answer with
@@ -174,10 +190,17 @@ struct HCCJournalDay: Decodable, Equatable {
     entries.first { $0.behaviorId == behaviorId }
   }
 
-  /// The logs for one due line, oldest first — `logs` arrives ordered by
-  /// `takenAt`, so the newest to undo is the last one.
-  func logs(forDueKey key: String) -> [HCCDoseLog] {
-    logs.filter { $0.dueKey == key }
+  /// The logs for one (protocol, product) PAIR, oldest first — `logs` arrives
+  /// ordered by `takenAt`, so the newest to undo is the last one.
+  ///
+  /// The pair, not the row's `id`, and the distinction is load-bearing since the
+  /// slot split: a log has no slot, so nothing on it could ever equal a split
+  /// row's `protocolId|productId|dinner`. Matching on that key found no log and
+  /// undo did nothing at all on the second half of every twice-daily line. The
+  /// pair is read off the row's own fields rather than sliced back out of the
+  /// key string, because the key's spelling is the server's to change.
+  func logs(forProtocolId protocolId: String, productId: String?) -> [HCCDoseLog] {
+    logs.filter { $0.protocolId == protocolId && $0.productId == productId }
   }
 }
 

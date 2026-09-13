@@ -305,7 +305,12 @@ private struct HCCJournalScreen: View {
       title: Self.doseTitle(due),
       subtitle: nil,
       doseText: Self.doseText(due),
-      count: due.expectedPerDay > 1 ? "\(due.takenCount)/\(due.dueCount)" : nil,
+      // Gated on what THIS ROW owes, not on what the pair owes in a day
+      // (`expectedPerDay`), which is the web page's rule too. Since the slot
+      // split a twice-daily pair is two rows owing one dose each, both still
+      // carrying `expectedPerDay: 2` — so the old gate printed "0/1" on a row
+      // where the fraction has nothing left to say.
+      count: due.dueCount > 1 ? "\(due.takenCount)/\(due.dueCount)" : nil,
       // A cycling product skips days by design; saying so is what stops a blank
       // line reading as a missed dose. It stays tappable so an off-schedule
       // dose can still be recorded.

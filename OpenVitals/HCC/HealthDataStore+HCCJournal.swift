@@ -32,9 +32,10 @@ final class HCCJournalState: ObservableObject {
   /// the same answer.
   @Published var savingBehaviorIds: Set<String> = []
 
-  /// Due keys (`protocolId|productId`) with a dose write in flight, and the
-  /// direction it is going. The check row reads this so the box flips on the
-  /// tap rather than after the round trip.
+  /// Row ids (`HCCDueDose.id` — the server's `key`, so one of a split pair's
+  /// rows is its own entry here) with a dose write in flight, and the direction
+  /// it is going. The check row reads this so the box flips on the tap rather
+  /// than after the round trip.
   @Published var pendingDoses: [String: Bool] = [:]
 
   /// Day keys whose first read has not answered yet — used to tell "loading"
@@ -218,13 +219,28 @@ extension HealthDataStore {
     }
   }
 
-  /// Undo the most recent dose logged against a due line on this day.
+  /// Undo the most recent dose logged against a due line's PAIR on this day.
+  ///
+  /// The pair, not the row: a `DoseLog` carries no slot, so for one of the rows
+  /// a twice-daily pair splits into (`splitBySlots`) there is no log that names
+  /// it, and keying the lookup on the row's `id` meant undo silently did nothing
+  /// on the Dinner half of Floratil and nitazoxanide.
+  ///
+  /// The accepted semantics, matching the web page's: undoing from EITHER row of
+  /// a split pair removes the newest log for the pair, which under the server's
+  /// positional attribution unchecks the LAST checked row rather than the row
+  /// that was tapped. That is intended, not a rough edge tolerated — the logs
+  /// share one pool and their timestamps cannot be read as a slot either (a dose
+  /// is stamped at the tap, and a back day at midday), so with one undo
+  /// affordance "undo" can only honestly mean "the last dose I logged".
   @discardableResult
   func undoJournalDose(day: String, due: HCCDueDose) async -> Bool {
     let state = hccJournal
     guard state.pendingDoses[due.id] == nil else { return false }
     guard let current = state.dayByDate[day],
-          let newest = current.logs(forDueKey: due.id).last
+          let newest = current
+            .logs(forProtocolId: due.protocolId, productId: due.productId)
+            .last
     else {
       return false
     }
@@ -319,7 +335,7 @@ private extension HealthDataStore {
       date: day.date,
       behaviors: day.behaviors,
       entries: day.entries,
-      due: day.due.map { $0.id == log.dueKey ? $0.adjustingTakenCount(by: 1) : $0 },
+      due: hccJournalDue(day.due, matching: log, adjustingBy: 1),
       logs: day.logs + [log]
     )
   }
@@ -330,9 +346,50 @@ private extension HealthDataStore {
       date: day.date,
       behaviors: day.behaviors,
       entries: day.entries,
-      due: day.due.map { $0.id == removed.dueKey ? $0.adjustingTakenCount(by: -1) : $0 },
+      due: hccJournalDue(day.due, matching: removed, adjustingBy: -1),
       logs: day.logs.filter { $0.id != id }
     )
+  }
+
+  /// Move one taken dose onto (or off) the right row of a log's PAIR.
+  ///
+  /// Which row of a split pair shows the tick is the SERVER's decision on the
+  /// next read, and it attributes positionally: first log of the day to the
+  /// first row, the last row absorbing anything over what the pair owes. This
+  /// reproduces that same rule locally, because the optimistic edit and the
+  /// answer that follows it must not disagree — matching on the row identity
+  /// instead (`id == log.dueKey`, as this did before the split landed) found no
+  /// row at all for a split pair, so a ticked Dinner dose un-ticked itself the
+  /// moment the write returned and the pending flag cleared.
+  ///
+  /// `day.due` carries a pair's split rows in slot order, which is the order
+  /// positional attribution counts in, so array order is the right order here.
+  static func hccJournalDue(
+    _ due: [HCCDueDose],
+    matching log: HCCDoseLog,
+    adjustingBy delta: Int
+  ) -> [HCCDueDose] {
+    let rows = due.indices.filter {
+      due[$0].protocolId == log.protocolId && due[$0].productId == log.productId
+    }
+    guard let lastRow = rows.last else { return due }
+
+    let target: Int?
+    if delta > 0 {
+      // The first row of the pair that is not yet taken; an extra dose beyond
+      // what the pair owes piles onto the last one, as the server's own
+      // arithmetic does rather than inventing a third row.
+      target = rows.first(where: { due[$0].takenCount == 0 }) ?? lastRow
+    } else {
+      // The mirror: the LAST row that is taken, which is the one the newest log
+      // of the pair is attributed to.
+      target = rows.last(where: { due[$0].takenCount > 0 })
+    }
+
+    guard let index = target else { return due }
+    var next = due
+    next[index] = next[index].adjustingTakenCount(by: delta)
+    return next
   }
 }
 
@@ -342,6 +399,7 @@ private extension HCCDueDose {
   /// from the protocol and never changes because a dose was ticked.
   func adjustingTakenCount(by delta: Int) -> HCCDueDose {
     HCCDueDose(
+      key: key,
       protocolId: protocolId,
       protocolTitle: protocolTitle,
       label: label,
