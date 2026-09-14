@@ -1371,6 +1371,37 @@ extension HCCHealthKitUploader {
       "[HCC][hk] window-hr: attaching \(read.samples.count) samples from \"\(read.source.name)\" "
         + "avg=\(read.avgBpm) max=\(read.maxBpm) first=\(iso.string(from: read.firstAt)) last=\(iso.string(from: read.lastAt))"
     )
+    // `HCC_DEBUG_HK_WINDOW_HR_DUMP=1` adds every source's series as 15-minute
+    // buckets (mean bpm, n) in the instance's civil time — a way to eyeball
+    // when heart rate fell to sleeping levels and rose again, source by source.
+    guard ProcessInfo.processInfo.environment["HCC_DEBUG_HK_WINDOW_HR_DUMP"] == "1" else { return }
+    guard let type = HKObjectType.quantityType(forIdentifier: .heartRate) else { return }
+    let unit = HKUnit.count().unitDivided(by: .minute())
+    let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [.strictStartDate])
+    let all: [HKQuantitySample] = (try? await withCheckedThrowingContinuation { continuation in
+      let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, error in
+        if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: (samples as? [HKQuantitySample]) ?? []) }
+      }
+      healthStore.execute(query)
+    }) ?? []
+    let local = DateFormatter()
+    local.locale = Locale(identifier: "en_US_POSIX")
+    local.timeZone = HCCInstanceZone.current
+    local.dateFormat = "MM-dd HH:mm"
+    var buckets: [String: [Int: [Double]]] = [:]
+    for sample in all {
+      let key = sample.sourceRevision.source.name
+      let bucket = Int(sample.startDate.timeIntervalSince1970 / 900)
+      buckets[key, default: [:]][bucket, default: []].append(sample.quantity.doubleValue(for: unit))
+    }
+    for (name, series) in buckets.sorted(by: { $0.key < $1.key }) {
+      print("[HCC][hk] window-hr-dump: source=\"\(name)\" buckets=\(series.count)")
+      for (bucket, bpms) in series.sorted(by: { $0.key < $1.key }) {
+        let at = Date(timeIntervalSince1970: Double(bucket) * 900)
+        let mean = Int((bpms.reduce(0, +) / Double(bpms.count)).rounded())
+        print("[HCC][hk] window-hr-dump:   \(local.string(from: at)) \(name.prefix(6)) mean=\(mean) min=\(Int(bpms.min() ?? 0)) max=\(Int(bpms.max() ?? 0)) n=\(bpms.count)")
+      }
+    }
   }
 
   /// `HCC_DEBUG_HK_SEED=1` / `HCC_DEBUG_HK_SYNC=1`, run once at launch.
