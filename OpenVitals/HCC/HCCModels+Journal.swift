@@ -101,8 +101,12 @@ struct HCCDueDose: Decodable, Equatable, Identifiable {
   /// `daily` or `cycling`. A cycling product skips days by design, so a blank
   /// day on one must not read as a missed dose.
   let cadence: String
-  /// When in the day it is taken: `prebreakfast` | `morning` | `lunch` |
-  /// `dinner` | `prebed` | `anytime`. Derived SERVER-side from the dose link's note, so this app and
+  /// Which section it belongs to: `peptide` | `prebreakfast` | `morning` |
+  /// `lunch` | `dinner` | `prebed` | `anytime`. Mostly a time of day; `peptide`
+  /// is a class of dose and leads the card. These are WIRE values and are not the
+  /// headings: `morning` has rendered as "Breakfast" since 2026-09-13, and the
+  /// raw value stays put so an older build never decodes an unknown slot.
+  /// Derived SERVER-side from the dose link's note and the protocol's category, so this app and
   /// the web page bucket the schedule identically rather than each parsing the
   /// same prose. Decoded leniently — an older instance sends no slot at all.
   let slot: String?
@@ -125,7 +129,9 @@ struct HCCDueDose: Decodable, Equatable, Identifiable {
 /// `anytime` — an unrecognised value must surface as unscheduled, never be
 /// dropped from the card or filed under a meal it was not assigned to.
 enum HCCDoseSlot: String, CaseIterable {
-  case prebreakfast, morning, lunch, dinner, prebed, anytime
+  // `peptide` is a CLASS, not a time of day, and it leads the card (Chris,
+  // 2026-09-14). `allCases` order IS the section order — see `hccGroupDosesBySlot`.
+  case peptide, prebreakfast, morning, lunch, dinner, prebed, anytime
 
   init(server: String?) {
     self = server.flatMap(HCCDoseSlot.init(rawValue:)) ?? .anytime
@@ -133,13 +139,20 @@ enum HCCDoseSlot: String, CaseIterable {
 
   var label: String {
     switch self {
-    // The one glass of water taken BEFORE food, ahead of the with-breakfast
-    // pills (Chris, 2026-09-12). The morning-FASTED injections are not here;
-    // they stay under Morning.
+    // The injections, in one section of their own at the top (Chris, 2026-09-14).
+    // Routed here SERVER-side by protocol category. A peptide dose with a
+    // genuinely later time — the GH pre-bed pulse from 2026-09-23 — keeps its own
+    // row in the evening rather than collapsing into this one.
+    case .peptide: "Peptides"
+    // The glass of water taken BEFORE food, ahead of the with-breakfast pills
+    // (Chris, 2026-09-12). [SUPERSEDED 2026-09-14: it briefly held the morning
+    // injections too, for one day, before they got their own section.]
     case .prebreakfast: "Pre-breakfast"
-    // "Morning", not "Breakfast": the slot holds both the supplements taken
-    // WITH breakfast and the GH shots taken morning-FASTED, before food.
-    case .morning: "Morning"
+    // "Breakfast" since 2026-09-13. [SUPERSEDED: this read "Morning" while the
+    // slot still held the morning-FASTED injections alongside the with-breakfast
+    // supplements — "Breakfast" would have contradicted the instruction on half
+    // its rows. The peptides moving to Pre-breakfast is what made it true.]
+    case .morning: "Breakfast"
     case .lunch: "Lunch"
     case .dinner: "Dinner"
     case .prebed: "Pre-bed"
