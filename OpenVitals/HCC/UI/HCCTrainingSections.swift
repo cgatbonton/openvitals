@@ -91,10 +91,13 @@ enum HCCTrainingFormat {
 /// The mockup's week card: the week label, the ‹ this week / next week › chip,
 /// the seven-day strip, and the helper line under it.
 ///
-/// Two positions rather than free paging: the payload carries exactly this week
-/// and the next one already resolved, and resolution is a server answer (it
-/// depends on stored plan rows and the last week actually trained). A third week
-/// would have to be guessed, and a guessed week is a wrong week.
+/// The chip pages across calendar weeks. It was two positions — this week and
+/// next — on the reasoning that resolution is a server answer and a third week
+/// "would have to be guessed". REVISED 2026-09-14 (Chris: "i should be able to
+/// go back to previous weeks"): the conclusion did not follow, because the
+/// server resolves any week on request (`GET /api/training/plan?weekStart=`) and
+/// the phone can fetch it. Still never guessed — a week that has not arrived
+/// renders as loading, not as the template.
 struct HCCTrainingWeekCard: View {
   let weekStart: String
   let todayYmd: String
@@ -130,21 +133,46 @@ struct HCCTrainingWeekCard: View {
     .hccCard()
   }
 
-  /// `.chip` with the two arrow buttons the mockup puts inside it.
+  /// `.chip` with the two arrow buttons the mockup puts inside it. The handoff's
+  /// capsule is unchanged — only how far the arrows reach, and what the label
+  /// between them says once it is more than one week out.
   private var chip: some View {
     HStack(spacing: 5) {
-      arrow("‹", delta: -1, isEnabled: weekOffset > 0, label: "Previous week")
-      Text(weekOffset == 0 ? "this week" : "next week")
+      arrow(
+        "‹",
+        delta: -1,
+        isEnabled: weekOffset > HCCTrainingState.weekOffsetRange.lowerBound,
+        label: "Previous week"
+      )
+      Text(Self.offsetLabel(weekOffset))
         .font(HCCTheme.Font.data(size: 10, weight: .medium))
         .tracking(0.4)
         .foregroundStyle(HCCTheme.Color.muted)
-      arrow("›", delta: 1, isEnabled: weekOffset < 1, label: "Next week")
+      arrow(
+        "›",
+        delta: 1,
+        isEnabled: weekOffset < HCCTrainingState.weekOffsetRange.upperBound,
+        label: "Next week"
+      )
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 3)
     // The handoff's chip: a `control2` fill and nothing else. The "Tinted"
     // direction separates by fill, so the old hairline is gone.
     .background(Capsule().fill(HCCTheme.Color.control2))
+  }
+
+  /// The chip's middle label. The three weeks anyone names in words get words;
+  /// further out, a count, because "Week of Aug 24" is already in the row above
+  /// and a second date there would just repeat it.
+  static func offsetLabel(_ offset: Int) -> String {
+    switch offset {
+    case 0: "this week"
+    case 1: "next week"
+    case -1: "last week"
+    case ..<(-1): "\(-offset) wks back"
+    default: "\(offset) wks ahead"
+    }
   }
 
   private func arrow(_ glyph: String, delta: Int, isEnabled: Bool, label: String) -> some View {

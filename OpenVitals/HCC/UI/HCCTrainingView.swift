@@ -157,19 +157,28 @@ struct HCCTrainingView: View {
       selectedDate: selected?.date,
       helper: helperText,
       onShift: { delta in
-        let next = min(1, max(0, state.weekOffset + delta))
+        let range = HCCTrainingState.weekOffsetRange
+        let next = min(range.upperBound, max(range.lowerBound, state.weekOffset + delta))
         guard next != state.weekOffset else { return }
         // Keep the same weekday across the jump, except when landing back on the
         // real calendar week, where today is the more useful default. The web
-        // strip's rule, so both clients move the selection the same way.
+        // strip's rule, so both clients move the selection the same way. Shift by
+        // the delta, not by +7: the strip pages backwards now too.
         let carried = selected?.date ?? data.todayYmd
         state.weekOffset = next
         state.selectedDate =
-          next == 0 ? data.todayYmd : HCCFiveThreeOne.addDays(carried, 7)
+          next == 0 ? data.todayYmd : HCCFiveThreeOne.addDays(carried, delta * 7)
       },
       onSelectDay: { date in state.selectedDate = date }
     )
     .id(HCCTrainingAnchor.week.rawValue)
+    // A week outside the payload's two is fetched, never guessed. Keyed on the
+    // week so paging re-runs it; the store no-ops a week already held or in
+    // flight, so this cannot loop or double-fetch.
+    .task(id: weekStart) {
+      guard state.weekOffset != 0, state.weekOffset != 1 else { return }
+      await store.loadHCCTrainingWeek(weekStart: weekStart)
+    }
 
     // Always on screen, for whichever day is selected — it is how a day's
     // workout is changed, so it is not something to go hunting for behind a
@@ -236,6 +245,11 @@ struct HCCTrainingView: View {
 
   private var helperText: String {
     if state.weekOffset == 0 { return "Tap a day to show it." }
+    // Behind today the week is history — it is read from what was logged and
+    // what was assigned, so "defaults copied from this week" would be a lie
+    // about it (and was, for every backward offset, before paging existed).
+    if state.weekOffset < 0 { return "Already happened. Tap a day to see or correct it." }
+    if state.weekOffset > 1 { return "Ahead of next week. Tap a day to show it." }
     return state.nextWeekEdited
       ? "Edited. Other days still default to this week's pattern."
       : "Defaults copied from this week. Tap a day to show it."
@@ -267,14 +281,22 @@ struct HCCTrainingView: View {
     selected: HCCResolvedDay?
   ) -> some View {
     if state.weekOffset > 0 {
-      HCCSectionHeader(title: "Next week")
+      HCCSectionHeader(title: state.weekOffset == 1 ? "Next week" : "Ahead")
       HCCFootnote(
         "Week \(week) — \(HCCFiveThreeOne.weekLabel(week)). Nothing here has been started; "
           + "the numbers come from that week's training maxes."
       )
+    } else if state.weekOffset < 0 {
+      HCCSectionHeader(title: "Earlier")
+      HCCFootnote(
+        "Week \(week) — \(HCCFiveThreeOne.weekLabel(week)). This week has already happened: "
+          + "each day shows what was logged on it, or what it was assigned."
+      )
     }
 
-    if days.isEmpty {
+    if state.isShownWeekLoading {
+      HCCLoadingNote().hccCard()
+    } else if days.isEmpty {
       HCCEmptyNote("This week has not been resolved yet.").hccCard()
     } else if let day = selected {
       // The handoff's section marker above the day's cards is a micro-label
@@ -334,7 +356,7 @@ struct HCCTrainingView: View {
       if let session = strength {
         startedStrength(session: session, day: day, cycle: cycle, label: label)
       } else {
-        previewStrength(day: day, week: week, tms: tms, label: label, canStart: !isPreview)
+        previewStrength(day: day, week: week, tms: tms, label: label, isPast: day.date < data.todayYmd)
       }
     }
 
@@ -347,19 +369,28 @@ struct HCCTrainingView: View {
         isDone: conditioning?.status == .done,
         isOptional: day.optional,
         isEnabled: !state.isWriting,
-        onMark: isPreview ? nil : { markConditioning(day: day, session: conditioning) },
+        onMark: { markConditioning(day: day, session: conditioning) },
         // HCC: the same setup sheet Home opens, named after this day.
-        onStartLive: Self.liveActivityIsAvailable && !isPreview
+        onStartLive: Self.liveActivityIsAvailable
           ? { liveTitle = HCCTrainingLiveStart(title: conditioning?.title ?? day.title) }
           : nil
       )
-      if let session = conditioning, !isPreview {
+      if let session = conditioning {
         noteCard(session: session)
       }
     }
 
     if !showsStrength && !showsConditioning {
-      HCCEmptyNote("\(label): rest day.").hccCard()
+      // A day the server resolved as REST_DEFAULT holds no record at all — no
+      // session, no pick. Calling that "rest day" asserts a decision he never
+      // made, which is the exact claim the server stopped making on 2026-09-14;
+      // repeating it here would put it straight back on screen.
+      HCCEmptyNote(
+        day.source == .restDefault
+          ? "\(label): nothing logged. Use the picker above to say what this day was."
+          : "\(label): rest day."
+      )
+      .hccCard()
     }
   }
 
@@ -422,15 +453,27 @@ struct HCCTrainingView: View {
   }
 
   /// A strength day with nothing stored yet: the prescription generated from the
-  /// training maxes, and — on the day itself — the button that turns it into a
-  /// session the server owns.
+  /// training maxes, and the button that turns it into a session the server owns.
+  ///
+  /// That button is offered on EVERY day, which is what the web page has always
+  /// done. It was briefly withheld from a day that had not arrived, on the
+  /// reasoning that a card saying Preview should not also say Start — a claim
+  /// about the label, not about the day. It left the phone unable to open
+  /// tomorrow's workout at all (Chris, 2026-09-14: "stuck in preview mode with
+  /// no way to start the activity"), while the same day on the web started with
+  /// one click. Preview describes where the numbers come from — generated from
+  /// the training maxes rather than read from stored sets — and stays on the
+  /// pill; it was never a reason to remove the control.
   @ViewBuilder
   private func previewStrength(
     day: HCCResolvedDay,
     week: Int,
     tms: [HCCLiftKey: Double],
     label: String,
-    canStart: Bool
+    /// A day already behind today opens as a LOG of what was done, not a start,
+    /// and its weights are a reconstruction from today's maxes — so both the
+    /// button and the footnote say so instead of implying otherwise.
+    isPast: Bool
   ) -> some View {
     ForEach(day.lifts, id: \.self) { lift in
       let tm = tms[lift] ?? 0
@@ -446,27 +489,28 @@ struct HCCTrainingView: View {
       )
     }
     if !day.lifts.isEmpty {
-      // `canStart` was declared and never read, so every preview card — the
-      // "Up next" day, and now each day next week — offered a button that
-      // starts a session dated a day that has not arrived. The card says
-      // Preview; it should not also say Start.
-      if canStart {
-        HCCButtonRow(
-          primary: HCCButtonSpec(title: "Start session", isEnabled: !state.isWriting) {
-            Task {
-              await store.startHCCTrainingSession(
-                HCCTrainingSessionCreate(
-                  date: day.date,
-                  kind: HCCTrainingSessionKind.strength.rawValue,
-                  lifts: day.lifts.map(\.rawValue),
-                  week: week
-                )
+      HCCButtonRow(
+        primary: HCCButtonSpec(
+          title: isPast ? "Log this session" : "Start session",
+          isEnabled: !state.isWriting
+        ) {
+          Task {
+            await store.startHCCTrainingSession(
+              HCCTrainingSessionCreate(
+                date: day.date,
+                kind: HCCTrainingSessionKind.strength.rawValue,
+                lifts: day.lifts.map(\.rawValue),
+                week: week
               )
-            }
+            )
           }
-        )
-      }
-      HCCFootnote("Sets are generated from week \(week)'s training maxes.")
+        }
+      )
+      HCCFootnote(
+        isPast
+          ? "Reconstructed from week \(week)'s training maxes — correct the reps as you log them."
+          : "Sets are generated from week \(week)'s training maxes."
+      )
     }
   }
 
@@ -647,10 +691,21 @@ struct HCCTrainingView: View {
     return groups
   }
 
+  /// `HCC_DEBUG_TRAINING_WEEK` — which calendar week the strip opens on, since
+  /// `simctl` cannot tap the chip. `next` / `last`, or a signed offset
+  /// (`-3`, `2`), clamped to `weekOffsetRange`. A backward offset is fetched
+  /// like any other, so the screenshot shows the real resolved week.
   private func applyDebugWeekIfRequested() {
     #if DEBUG
-    if ProcessInfo.processInfo.environment["HCC_DEBUG_TRAINING_WEEK"] == "next" {
-      state.weekOffset = 1
+    switch ProcessInfo.processInfo.environment["HCC_DEBUG_TRAINING_WEEK"] {
+    case "next": state.weekOffset = 1
+    case "last": state.weekOffset = -1
+    case let raw?:
+      if let n = Int(raw) {
+        let range = HCCTrainingState.weekOffsetRange
+        state.weekOffset = min(range.upperBound, max(range.lowerBound, n))
+      }
+    case nil: break
     }
     if let day = ProcessInfo.processInfo.environment["HCC_DEBUG_TRAINING_PICKER"], !day.isEmpty {
       state.selectedDate = day

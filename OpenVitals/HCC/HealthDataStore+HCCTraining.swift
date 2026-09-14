@@ -31,11 +31,33 @@ final class HCCTrainingState: ObservableObject {
   /// next write that succeeds.
   @Published var lastError: String?
 
-  /// 0 = the calendar week the server called current, 1 = the week after it.
-  /// The mockup's strip is a two-position toggle, not free paging: the payload
-  /// carries exactly these two resolved weeks, and any third would have to be
-  /// fetched or guessed.
+  /// Calendar weeks from the week the server called current: 0 = this week,
+  /// 1 = next week, -1 = last week, and so on within `weekOffsetRange`.
+  ///
+  /// REVISED 2026-09-14 (Chris: "i should be able to go back to previous weeks
+  /// on the training page and edit them"). This was clamped to 0…1 because the
+  /// payload carries exactly two resolved weeks and "a third would have to be
+  /// guessed". The premise was wrong, not the reasoning: a third week does not
+  /// have to be guessed, it can be FETCHED — `GET /api/training/plan?weekStart=`
+  /// resolves any week server-side, and the web client had been using it all
+  /// along. The phone simply never called it. It does now (`weekPlans`).
   @Published var weekOffset: Int = 0
+
+  /// How far the strip may page, mirroring the session window the payload is
+  /// built with (`WINDOW_WEEKS_BACK` / `WINDOW_WEEKS_FWD` in
+  /// `src/lib/training.ts`). Past that, `data.sessions` would not contain the
+  /// week's logged work, so a tile could show a plan while hiding the session
+  /// that actually happened on it — worse than not paging there at all.
+  static let weekOffsetRange = -26...8
+
+  /// Resolved weeks the phone has fetched, keyed by their Monday. The payload's
+  /// own two weeks are NOT copied in here — `shownWeekPlan` reads them straight
+  /// from `data`, so a reload can never leave a stale copy shadowing them.
+  @Published var weekPlans: [String: [HCCResolvedDay]] = [:]
+
+  /// Weeks with a fetch in flight, so the strip can say "loading" instead of
+  /// "not resolved yet", and so a second page-through does not double-fetch.
+  @Published var loadingWeeks: Set<String> = []
 
   /// The day the tab is showing — its card, and the picker under it. `nil` until
   /// the first render resolves it (today when today is in the shown week, else
@@ -79,10 +101,22 @@ final class HCCTrainingState: ObservableObject {
     return HCCFiveThreeOne.addDays(data.weekStartYmd, weekOffset * 7)
   }
 
-  /// The resolved week currently shown. Both weeks arrive in the payload.
+  /// The resolved week currently shown. This week and the next arrive in the
+  /// payload; anything else was fetched into `weekPlans`, and is empty until it
+  /// lands — never guessed from the template, which is the whole point.
   var shownWeekPlan: [HCCResolvedDay] {
     guard let data else { return [] }
-    return weekOffset == 0 ? data.weekPlan : data.nextWeekPlan
+    switch weekOffset {
+    case 0: return data.weekPlan
+    case 1: return data.nextWeekPlan
+    default: return shownWeekStart.flatMap { weekPlans[$0] } ?? []
+    }
+  }
+
+  /// True when the shown week is not here yet and a fetch is running for it.
+  var isShownWeekLoading: Bool {
+    guard let start = shownWeekStart else { return false }
+    return shownWeekPlan.isEmpty && loadingWeeks.contains(start)
   }
 
   /// The AMRAP rep count the stepper is showing for a set: the draft if one has
@@ -115,8 +149,21 @@ final class HCCTrainingState: ObservableObject {
   }
 
   fileprivate func replaceWeekPlan(weekStart: String, days: [HCCResolvedDay]) {
+    // The fetched-week cache is written unconditionally: a pick on a week the
+    // payload does not carry has nowhere else to land, and `replacingWeekPlan`
+    // only knows the payload's two.
+    if weekPlans[weekStart] != nil { weekPlans[weekStart] = days }
     guard let current = data else { return }
     data = current.replacingWeekPlan(weekStart: weekStart, days: days)
+  }
+
+  /// Drop every fetched week. Called on reload: a plan change re-shapes each
+  /// later week that was inheriting from the edited one, so a cached copy of
+  /// those is exactly the stale answer that must not be shown. The web client
+  /// does the same (it keeps only the week the API just re-resolved).
+  fileprivate func clearFetchedWeeks() {
+    weekPlans = [:]
+    loadingWeeks = []
   }
 }
 
@@ -207,6 +254,9 @@ extension HealthDataStore {
       // would otherwise keep showing the stale draft.
       state.amrapDrafts.removeAll()
       state.noteDrafts.removeAll()
+      // One plan change re-shapes every later week that was inheriting from the
+      // edited day, so cached weeks are dropped and re-fetched on demand.
+      state.clearFetchedWeeks()
     } catch {
       let message = Self.hccTrainingMessage(error)
       Self.hccTrainingHandleUnauthorized(error)
@@ -214,6 +264,28 @@ extension HealthDataStore {
       // failure is reported and the last good week stays readable.
       state.set(phase: state.data == nil ? .failed(message) : .loaded)
       if state.data != nil { state.lastError = message }
+    }
+  }
+
+  /// Fetch one resolved week the payload does not carry, for the strip paging
+  /// beyond this week and the next.
+  ///
+  /// A read, so it does NOT touch `lastError` or the writing flag — paging is
+  /// not a mutation, and a failed fetch must not look like a failed save. It
+  /// leaves the week empty instead, and paging away and back retries; the same
+  /// choice the web client makes.
+  func loadHCCTrainingWeek(weekStart: String) async {
+    let state = hccTraining
+    guard state.weekPlans[weekStart] == nil, !state.loadingWeeks.contains(weekStart) else { return }
+    state.loadingWeeks.insert(weekStart)
+    defer { state.loadingWeeks.remove(weekStart) }
+    do {
+      let response = try await HCCSession.shared.client.trainingWeekPlan(weekStart: weekStart)
+      // Key by the week the SERVER resolved, not the one asked for: the route
+      // snaps any date to its Monday, so this is the authoritative key.
+      state.weekPlans[response.weekStart] = response.weekPlan
+    } catch {
+      Self.hccTrainingHandleUnauthorized(error)
     }
   }
 

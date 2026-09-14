@@ -538,15 +538,39 @@ and says nothing the card header does not. It survives only as the fallback for
 a protocol with **no linked product** (a free-text regimen), whose rows have no
 other name — drop that fallback and they render blank.
 
-The dose rows are **grouped by time of day** (Morning · Lunch · Dinner ·
-Pre-bed · Anytime), the way the printed schedule groups them. The first slot is
-"Morning" rather than "Breakfast" because it holds both the supplements taken
-WITH breakfast and the GH shots taken morning-FASTED, on waking, 30-60 min
-BEFORE food — a "Breakfast" heading would state the opposite of the instruction
-on the dose itself. The slot is
-decided SERVER-side — `doseSlot` in the backend's `src/lib/journal/doses.ts`
-reads it off the dose link's free-text `notes`, since there is no timing column
-— and arrives on `HCCDueDose.slot`. Do not parse it again here: one parser, two
+The dose rows are grouped into sections (**Peptides** · Pre-breakfast ·
+Breakfast · Lunch · Dinner · Pre-bed · Anytime), the way the printed schedule
+groups them. All but the first are times of day.
+
+REVISED 2026-09-14 (Chris) — **the peptides have a section of their own, leading
+the card.** [SUPERSEDED 2026-09-13, which sent them to Pre-breakfast; they sat
+there one day, mixed in with the water glass.] `peptide` is therefore a CLASS,
+not a time — the one section answering "what do I inject" rather than "what do I
+take now" — and `HCCDoseSlot.allCases` order puts it first.
+
+REVISED 2026-09-13 (Chris) — the breakfast slot is headed **"Breakfast"**.
+[SUPERSEDED: it was headed "Morning" precisely because it held both the
+supplements taken WITH breakfast and the injections taken morning-FASTED, on
+waking, 30-60 min BEFORE food, so "Breakfast" would have stated the opposite of
+the instruction on half its rows. Emptying it of the injections is what made the
+narrower heading true.]
+
+Both moves are by **protocol category**, not by note wording:
+`applyCategorySlotRules` in the backend rewrites a `PEPTIDE` line's `morning` or
+`prebreakfast` slot to `peptide`, and leaves `lunch`/`dinner`/`prebed`/`anytime`
+alone. That exception is load-bearing: the GH blend's second, pre-bed pulse from
+2026-09-23 keeps its own evening row, because folding it into the Peptides
+section would collapse the pair into one row reading "0 of 2 logged" — the bug
+reported 2026-09-12 about the Floratil/nitazoxanide dinner doses. An `anytime`
+peptide also stays put, since that means the record never says when and the
+heading is how the gap gets noticed.
+
+The slot is decided SERVER-side — `doseSlot` in the backend's
+`src/lib/journal/doses.ts` reads it off the dose link's free-text `notes`, since
+there is no timing column, then the category rule applies — and arrives on
+`HCCDueDose.slot`. The wire values are unchanged (`morning` still means the
+breakfast slot); only the heading moved, so an older build never meets an
+unknown slot. Do not parse it again here: one parser, two
 renderers, or the phone and the web page will disagree about when a supplement
 is taken. A slot the server omits or this build does not recognise falls to
 **Anytime**; an unrecognised value must never be dropped from the card or filed
@@ -687,12 +711,51 @@ each anchor week plus one negative offset (JS `Math.floor` vs Swift's truncating
 division), the whole `dayOptionCatalog`, and the day-key arithmetic. Re-run it
 after any change to either side.
 
-**Two weeks, not free paging.** The web strip pages across arbitrary weeks and
-fetches each one from `/api/training/plan?weekStart=`. The phone shows only the
-week the payload carries and the one after it, per the mockup's
-`‹ this week / next week ›` chip. What a Tuesday IS depends on stored plan rows
-and on the last week actually trained — a server answer — so a third week would
-have to be guessed, and a guessed week is a wrong week.
+**The strip pages across weeks, and fetches what it does not hold.** REVISED
+2026-09-14 (Chris: "i should be able to go back to previous weeks on the
+training page and edit them").
+
+This was two positions — this week and next — on the reasoning that what a
+Tuesday IS depends on stored plan rows and on the last week actually trained, so
+a third week "would have to be guessed, and a guessed week is a wrong week". The
+premise was false, not the reasoning: a third week never had to be guessed,
+because the server resolves any week on request. `GET /api/training/plan?weekStart=`
+has existed as long as the web strip, which has always used it; the phone simply
+never called it.
+
+- `HCCTrainingState.weekOffset` is now a signed offset over
+  `weekOffsetRange` (`-26...8`), mirroring the payload's own session window
+  (`WINDOW_WEEKS_BACK` / `WINDOW_WEEKS_FWD` in `src/lib/training.ts`). Paging
+  further would show a week's plan while `data.sessions` lacked the sessions
+  logged in it — a tile claiming a rest day over real work.
+- Offsets 0 and 1 still read straight from the payload. Anything else is fetched
+  into `weekPlans`, keyed by the Monday **the server** resolved.
+- **Still never guessed.** A week that has not arrived renders as loading, not as
+  the template. `loadHCCTrainingWeek` is a read: it never touches `lastError` or
+  the writing flag, and a failure leaves the week empty so paging away and back
+  retries — the web client's behaviour.
+- A reload clears `weekPlans`. One plan change re-shapes every later week that
+  was inheriting from the edited day, so a cached copy of those is precisely the
+  stale answer that must not be drawn.
+- **Put the week in `query:`, never in the path.** `getBare` feeds `path` to
+  `appendingPathComponent`, which percent-encodes `?` to `%3F` and makes the
+  whole thing one bogus path segment — `/api/training/plan%3FweekStart=…`, a 404
+  (hit while building this, 2026-09-14).
+
+**A past week is history, and the server says so.** The resolver (`resolveWeekPlan`
+in `src/lib/training-plan.ts`) resolves a date before today from its own record
+only — the session logged on it, else an explicit plan row, else nothing — rather
+than from inheritance or the template, which are forward-looking guesses and
+wrong by construction for a day that has been. Before that fix, paging back drew
+a workout on every one of the seven days (Chris, 2026-09-14: "it's defaulting
+every day to a workout"). Two consequences here:
+
+- A day with `source == .restDefault` holds NO record. Do not call it a rest day
+  in copy — that asserts a decision he never made. `weekBody` says "nothing
+  logged" for it and points at the picker.
+- `HCCTrainingFormat.stripLabel` returns `""` for every rest day, so a chosen
+  Rest and an untrained day look the same on the strip. The day's card below
+  distinguishes them; the tile does not. Left as the handoff has it.
 
 **Tapping a day selects it.** REVISED 2026-09-08 (Chris: "when I tap on a
 specific day it shows the workouts for multiple days"). The strip used to be a
@@ -730,11 +793,17 @@ Days behind today show what was logged, today keeps its Start button, days ahead
 are previews without one. `isPreview` is `day.date > todayYmd` and nothing else;
 day keys are `YYYY-MM-DD`, where string order is date order.
 
-The selection is never trusted straight from state: the strip toggles between two
-weeks, so a stored date only counts when the shown week contains it, falling back
-to today when today is in view and the week's first day otherwise. The week toggle
-carries the same weekday across the jump, or snaps to today coming back to this
-week — the web strip's rule, so both clients move the selection identically.
+`HCC_DEBUG_TRAINING_WEEK` opens the strip on a given week, since `simctl` cannot
+tap the chip: `next` / `last`, or a signed offset (`-3`, `2`), clamped to
+`weekOffsetRange`. A backward offset is fetched like any other, so the screenshot
+shows the real resolved week rather than a placeholder.
+
+The selection is never trusted straight from state: the strip pages across weeks,
+so a stored date only counts when the shown week contains it, falling back to
+today when today is in view and the week's first day otherwise. Paging carries
+the same weekday across the jump — shifted by the delta, in whichever direction
+it went — or snaps to today coming back to this week; the web strip's rule, so
+both clients move the selection identically.
 
 **Progression charts belong to the selected day, not to the tab.** REVISED
 2026-09-08 (Chris: "it should show the progression cards only for squat and
