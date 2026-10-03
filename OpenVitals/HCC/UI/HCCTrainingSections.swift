@@ -191,11 +191,19 @@ struct HCCTrainingWeekCard: View {
   /// `.wk.big span` — weekday, date, short workout tag; a dot when the day has
   /// work on it, an accent border on today, an accent wash on the selected day
   /// (the one the card below is showing).
+  ///
+  /// REVISED 2026-10-03: a day can hold more than one session (a lift plus a
+  /// conditioning workout added to it), so the dot turns done only when EVERY
+  /// session on the day is past planning — one finished workout no longer
+  /// marks a day whose lift is still open. A day holding more than one session
+  /// says so with a compact `+N` after its tag.
   private func dayTile(_ day: HCCResolvedDay) -> some View {
     let isToday = day.date == todayYmd
     let isSelected = day.date == selectedDate
-    let hasWork = day.option != .rest
-    let isDone = sessions.contains { $0.dateYmd == day.date && $0.status == .done }
+    let daySessions = sessions.filter { $0.dateYmd == day.date }
+    let hasWork = day.option != .rest || !daySessions.isEmpty
+    let isDone = Self.isDayDone(daySessions)
+    let extra = Self.extraSessionCount(daySessions)
 
     return Button { onSelectDay(day.date) } label: {
       VStack(spacing: 3) {
@@ -205,15 +213,23 @@ struct HCCTrainingWeekCard: View {
         Text(HCCTrainingFormat.dayNumber(day.date))
           .font(HCCTheme.Font.data(size: 10))
           .foregroundStyle(HCCTheme.Color.muted)
-        Text(HCCTrainingFormat.stripLabel(day))
-          .font(HCCTheme.Font.body(size: 8.5))
-          .foregroundStyle(HCCTheme.Color.accentText)
-          .lineLimit(1)
-          .truncationMode(.tail)
-          // A definite width proposal is what keeps the longest tag ("Run club")
-          // ellipsised inside the tile instead of running past it.
-          .frame(maxWidth: .infinity, minHeight: 9)
-          .padding(.horizontal, 2)
+        HStack(spacing: 1) {
+          Text(HCCTrainingFormat.stripLabel(day))
+            .lineLimit(1)
+            .truncationMode(.tail)
+          // Never truncated: it is the only sign on the strip that the day holds
+          // a second workout, so the tag gives way to it rather than the reverse.
+          if extra > 0 {
+            Text("+\(extra)")
+              .fixedSize()
+          }
+        }
+        .font(HCCTheme.Font.body(size: 8.5))
+        .foregroundStyle(HCCTheme.Color.accentText)
+        // A definite width proposal is what keeps the longest tag ("Run club")
+        // ellipsised inside the tile instead of running past it.
+        .frame(maxWidth: .infinity, minHeight: 9)
+        .padding(.horizontal, 2)
       }
       .frame(maxWidth: .infinity)
       // The handoff's tile box: 7 above, 2 at the sides, 10 below.
@@ -248,8 +264,25 @@ struct HCCTrainingWeekCard: View {
     .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     .accessibilityLabel(
       "\(HCCTrainingFormat.longDow(day.date)) \(HCCTrainingFormat.dayNumber(day.date)), \(day.title)"
+        + (extra > 0 ? ", \(daySessions.count) workouts" : "")
+        + (isDone ? ", done" : "")
     )
     .accessibilityHint("Show this day")
+  }
+
+  /// Done means: at least one session, none of them still PLANNED, and at least
+  /// one actually DONE — the web strip's rule. A day with a finished
+  /// conditioning workout and a lift still PLANNED is not done, and a day whose
+  /// sessions were all SKIPPED is not done either.
+  static func isDayDone(_ daySessions: [HCCTrainingSession]) -> Bool {
+    !daySessions.isEmpty
+      && daySessions.allSatisfy { $0.status != .planned }
+      && daySessions.contains { $0.status == .done }
+  }
+
+  /// Sessions beyond the first, for the `+N` on the tile.
+  static func extraSessionCount(_ daySessions: [HCCTrainingSession]) -> Int {
+    max(0, daySessions.count - 1)
   }
 }
 
@@ -262,6 +295,11 @@ struct HCCTrainingSetTable: View {
   let rows: [Row]
   var isEnabled: Bool = true
   var onToggle: ((Row) -> Void)?
+  /// On a FINISHED session an un-logged row is a set that was not done, not a
+  /// target still to hit — so it reads "Not done" instead of the prescription's
+  /// reps. Nothing is filled in for it: the box stays empty, and ticking it is
+  /// still a correction the owner can make.
+  var marksUnloggedAsNotDone: Bool = false
 
   struct Row: Identifiable {
     let id: String
@@ -304,6 +342,7 @@ struct HCCTrainingSetTable: View {
   private func setRow(_ row: Row) -> some View {
     let prescribed = row.prescribed
     let logged = row.actualReps != nil
+    let missed = marksUnloggedAsNotDone && !logged
     return VStack(spacing: 0) {
       HCCDivider()
       HStack(spacing: Self.gap) {
@@ -320,7 +359,9 @@ struct HCCTrainingSetTable: View {
           .minimumScaleFactor(0.8)
           .frame(width: Self.columns.weight, alignment: .leading)
 
-        Text(HCCFiveThreeOne.formatPlates(HCCFiveThreeOne.platesPerSide(prescribed.weightKg)))
+        // A set that was not done has no plates to load; the space goes to the
+        // wider "Not done" in the reps column.
+        Text(missed ? "" : HCCFiveThreeOne.formatPlates(HCCFiveThreeOne.platesPerSide(prescribed.weightKg)))
           .font(HCCTheme.Font.data(size: 10.5))
           .foregroundStyle(HCCTheme.Color.muted)
           .lineLimit(1)
@@ -329,11 +370,20 @@ struct HCCTrainingSetTable: View {
 
         // Muted until the set is logged, primary once it is: the column reads
         // as a checklist rather than as four identical numbers.
-        Text(repsText(row))
-          .font(HCCTheme.Font.data(size: 12))
-          .monospacedDigit()
-          .foregroundStyle(logged ? HCCTheme.Color.text : HCCTheme.Color.muted)
-          .frame(width: Self.columns.reps, alignment: .trailing)
+        if missed {
+          Text("Not done")
+            .font(HCCTheme.Font.data(size: 11))
+            .foregroundStyle(HCCTheme.Color.muted)
+            .lineLimit(1)
+            .fixedSize()
+            .frame(minWidth: Self.columns.reps, alignment: .trailing)
+        } else {
+          Text(repsText(row))
+            .font(HCCTheme.Font.data(size: 12))
+            .monospacedDigit()
+            .foregroundStyle(logged ? HCCTheme.Color.text : HCCTheme.Color.muted)
+            .frame(width: Self.columns.reps, alignment: .trailing)
+        }
 
         if let onToggle {
           checkbox(isOn: logged) { onToggle(row) }
@@ -487,16 +537,29 @@ struct HCCTrainingLiftCard<Footer: View>: View {
   let rows: [HCCTrainingSetTable.Row]
   var isEnabled: Bool = true
   var onToggle: ((HCCTrainingSetTable.Row) -> Void)?
+  /// The session this card belongs to is finished. Un-logged rows then read
+  /// "Not done", and a lift with no logged set at all carries a "Not done" tag —
+  /// the record of a partial finish, never a filled-in guess.
+  var sessionIsFinished: Bool = false
   @ViewBuilder var footer: () -> Footer
+
+  private var liftNotDone: Bool {
+    sessionIsFinished && !rows.isEmpty && rows.allSatisfy { $0.actualReps == nil }
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(alignment: .top, spacing: 10) {
         VStack(alignment: .leading, spacing: 3) {
-          Text(lift.label)
-            .font(HCCTheme.Font.display(size: 17, weight: .semibold))
-            .tracking(-0.3)
-            .foregroundStyle(HCCTheme.Color.text)
+          // The same title-plus-tag shape the conditioning card uses for
+          // "optional".
+          HStack(spacing: 6) {
+            Text(lift.label)
+              .font(HCCTheme.Font.display(size: 17, weight: .semibold))
+              .tracking(-0.3)
+              .foregroundStyle(HCCTheme.Color.text)
+            if liftNotDone { HCCPill("Not done", tone: .muted) }
+          }
           Text(
             "Training max \(HCCFiveThreeOne.formatKg(trainingMaxKg)) kg · week \(week) · "
               + HCCFiveThreeOne.weekLabel(week)
@@ -509,7 +572,12 @@ struct HCCTrainingLiftCard<Footer: View>: View {
       }
       .padding(.bottom, 10)
 
-      HCCTrainingSetTable(rows: rows, isEnabled: isEnabled, onToggle: onToggle)
+      HCCTrainingSetTable(
+        rows: rows,
+        isEnabled: isEnabled,
+        onToggle: onToggle,
+        marksUnloggedAsNotDone: sessionIsFinished
+      )
 
       footer()
     }
@@ -558,6 +626,11 @@ struct HCCTrainingConditioningCard: View {
   /// Rendered only when the live-activity screen exists (see
   /// `HCCTrainingView.liveActivityIsAvailable`).
   var onStartLive: (() -> Void)?
+  /// Present only on a workout ADDED to the day (not the plan's own). Its undo
+  /// is removal, not PLANNED: a PLANNED leftover on a day it was never planned
+  /// for is an unticked to-do that keeps the day from ever reading done. So a
+  /// done added workout offers "Remove" where the plan's own offers "Undo".
+  var onRemove: (() -> Void)?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -588,14 +661,29 @@ struct HCCTrainingConditioningCard: View {
               action: $0
             )
           },
-          secondary: HCCButtonSpec(title: isDone ? "Undo" : "Mark done", isEnabled: isEnabled, action: onMark)
+          secondary: markSpec(onMark: onMark)
         )
         .padding(.top, 10)
+        // An added workout that is somehow still PLANNED (undone elsewhere)
+        // can be removed too, on its own row so "Mark done" keeps its slot.
+        if let onRemove, !isDone {
+          HCCButtonRow(
+            secondary: HCCButtonSpec(title: "Remove", isEnabled: isEnabled, isDestructive: true, action: onRemove)
+          )
+          .padding(.top, 8)
+        }
       }
     }
     // The card that belongs to the day's conditioning work carries the sleep
     // tint, the handoff's "a card that belongs to a metric wears its colour".
     .hccCard(tint: HCCTheme.Color.sleep)
+  }
+
+  private func markSpec(onMark: @escaping () -> Void) -> HCCButtonSpec {
+    if isDone, let onRemove {
+      return HCCButtonSpec(title: "Remove", isEnabled: isEnabled, isDestructive: true, action: onRemove)
+    }
+    return HCCButtonSpec(title: isDone ? "Undo" : "Mark done", isEnabled: isEnabled, action: onMark)
   }
 }
 

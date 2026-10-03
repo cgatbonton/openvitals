@@ -683,9 +683,99 @@ answers.
 reads `GET /api/training` — the same serialised `TrainingData` the web page
 hands its client — and writes through the four existing web routes:
 `PUT /api/training/plan`, `POST /api/training/sessions`,
-`PATCH /api/training/sessions/{id}`, `PATCH /api/training/sets/{id}` and
-`POST /api/training/cycle`. All of them answer with a bare `ok()` object, not the
-`/api/mobile/v1` envelope.
+`PATCH /api/training/sessions/{id}`, `DELETE /api/training/sessions/{id}`,
+`PATCH /api/training/sets/{id}` and `POST /api/training/cycle`. All of them
+answer with a bare `ok()` object, not the `/api/mobile/v1` envelope.
+
+**A session ack is the tracker's DTO, not a database row (2026-09-24).** The
+POST and PATCH on `/sessions` return `serializeSession(...)` — the same shape
+`GET /api/training` sends, with `dateYmd`. They used to return the raw row
+(`date`, no `dateYmd`), `HCCTrainingSessionAck` failed to decode, and
+`startHCCTrainingSession` skipped both the adopt and the reload: tapping Start
+looked ignored until a dropdown re-pick reloaded the tracker. A new write route
+the phone decodes must answer in the DTO shape too.
+
+**A started session can be cancelled (2026-09-29).** "Cancel session" sits
+under a started strength day while it is not DONE, behind a destructive
+confirmation that names how many logged sets go with it.
+`cancelHCCTrainingSession` removes the row locally, calls the DELETE, reloads,
+and puts the row back on failure. The server keeps the day's plan pick, so the
+day returns to its preview and a fresh Start prescribes from the cycle as it is
+now. Why it exists: a day started in the deload week kept its deload sets
+through "Skip deload" and every re-pick (the plan route preserves a session's
+own `week`), and the only way out was switching the day to Rest and back. The
+delete's audit row carries the whole session, logged reps included.
+
+**A started session can be finished short, and reopened (2026-10-03).** Next
+to "Cancel session" a started strength day that is not DONE now offers
+"Finish session" — the web's button. It is withheld while nothing is logged
+(finishing an empty session records a workout that did not happen; Cancel is
+the exit for that). Every set logged: it PATCHes `status: DONE` at once. Some
+logged: a confirmation asks "Finish with N of M sets logged?" and names each
+lift with no logged set ("Military press not done") and that the unlogged sets
+stay on record as not done. The PATCH does no set-completeness check, so that
+question is the only place the shortfall is said. Before this a half-logged
+session could only end by logging every set (the server auto-DONEs on the last)
+or by Cancel, which deletes the sets that were logged.
+
+A DONE strength session shows "Reopen" (PATCH `PLANNED`, sets untouched) where
+Finish/Cancel were. Its un-logged rows read **"Not done"** in muted type in
+place of the prescribed reps, with no plates and an empty box — never a filled
+tick, never the target reps passed off as done — and a lift with no logged set
+at all carries a muted "Not done" tag beside its name. The box stays tappable:
+ticking a forgotten set is a correction, not a reopen.
+
+**A day can hold more than one workout (2026-10-03).** The server has always
+allowed several sessions per date; the phone drew only the first conditioning
+one. Now:
+
+- `dayCards` draws the strength session as before and a card for **every**
+  conditioning session on the day (`conditioningEntries`). The plan's own
+  conditioning workout comes first — its session if one is titled as the day
+  **or as one of that weekday template's alternatives** (a Tuesday offering
+  Norwegian 4×4 / CrossFit, logged as CrossFit, is still Tuesday's own; the
+  web's `isAlternative`), else the unlogged plan card — then every other
+  conditioning session in payload order, marked **added**. Strict on purpose: a
+  class added to a Bouldering day never stands in for the Bouldering.
+- **An added workout is removed, not undone.** Its done card offers "Remove"
+  where the plan's own offers "Undo" (and a stray PLANNED added one gets a
+  Remove row too), behind "Remove X from <day>? … The rest of the day stays as
+  it is." Remove is the session DELETE (`cancelHCCTrainingSession`: optimistic
+  remove, rollback on failure). Undo would PATCH PLANNED and leave an unticked
+  to-do on a day it was never planned for, which keeps the day from ever
+  reading done. The web card does the same.
+- **"Add workout"** sits under the selected day's cards on any day that has
+  arrived (`day.date <= todayYmd`, string order). It lists the catalog's
+  conditioning titles (`dayOptionCatalog`) minus those already on the day and
+  minus the plan's own title (its card is already there with "Mark done"), and a
+  pick POSTs `/api/training/sessions` `{date, kind: CONDITIONING, title,
+  status: DONE}`. It works on a past day that resolves to STRENGTH. It does
+  **not** go through the plan picker: `PUT /api/training/plan` sets ONE option
+  per day and rewrites or deletes unstarted PLANNED sessions, so it can change
+  what a day is but never add to it. The POST is idempotent on (date, title),
+  which is why titles already on the day are not offered.
+- **The strip's done dot** turns done only when the day holds at least one
+  session, none is `PLANNED`, and at least one is `DONE` (the web's rule): a
+  finished conditioning workout next to a lift still open no longer marks the
+  day, and a day whose sessions were all SKIPPED is not done. A day with more
+  than one session shows a compact `+N` after its tag, which never truncates —
+  the tag gives way to it.
+
+**A cycle start carries unlifted days with it (2026-09-29).** `startNext`
+re-prescribes every strength session that is PLANNED with nothing logged and
+dated today or later onto the new cycle's week 1; `revertCycleStart` refuses
+only on logged work and hands those sessions back to the deload. So "Back to
+cycle N deload" is shown when `cycleSessions` are all `isStillAPlan`, and
+`programWeekOffset` is fed "has logged work", not "has rows" — a carried-over
+day has not spent the new cycle's week.
+
+**A session's max is its own cycle's (2026-09-29).** `HCCTrainingSession`
+carries `cycleNumber` / `cycleTms` — the cycle that generated its sets. A
+started card draws `session.ownTm(lift)` and falls back to the active cycle
+only when that is nil (conditioning). Drawing the active cycle's max put cycle
+4's 165 on last week's cycle-3 Squat card (its own was 160). The progression
+chart keeps the current max on purpose. The write routes include the cycle in
+their ack, because `patchHCCTrainingSession` swaps the ack in without a reload.
 
 **`HCCFiveThreeOne.swift` is a mirror, not a source.** It is a 1:1 port of
 `src/lib/fiveThreeOne.ts`. The server writes the prescribed `LiftSet` rows the
@@ -851,7 +941,7 @@ do anything must not be on screen.
 | `HCC_DEBUG_TRAINING_WEEK=next` | Opens on the next-week preview instead of today. |
 | `HCC_DEBUG_TRAINING_PICKER=YYYY-MM-DD` | Selects that day on appear, so its card and picker are what renders. (Named `PICKER` from when a tap only opened a picker; kept so existing recipes still work.) |
 | `HCC_DEBUG_TRAINING_ANCHOR=week\|progression\|controls` | Scrolls to that block on appear — the tab is several screens tall and `simctl` cannot scroll. Same trick as `HCC_DEBUG_HOME_ANCHOR`. |
-| `HCC_DEBUG_TRAINING_SAVE=<action>` | Runs ONE write through the same store method the button runs, so a write path can be proved from a launch with no UI automation — the Alarm/Customize `HCC_DEBUG_SAVE` pattern. **It MUTATES SERVER STATE**: never set it against an instance whose data you are not willing to change. Actions: `start`, `logset`, `amrap:<n>`, `note:<text>`, `plan:<ymd>:<catalog key>`, `cycle:<action>[:<week>]`. |
+| `HCC_DEBUG_TRAINING_SAVE=<action>` | Runs ONE write through the same store method the button runs, so a write path can be proved from a launch with no UI automation — the Alarm/Customize `HCC_DEBUG_SAVE` pattern. **It MUTATES SERVER STATE**: never set it against an instance whose data you are not willing to change. Actions: `start`, `logset`, `amrap:<n>`, `note:<text>`, `plan:<ymd>:<catalog key>`, `cycle:<action>[:<week>]`, `finish` / `reopen` (today's strength session, no partial-finish question), `add:<ymd>:<title>` (a DONE conditioning workout on that day). |
 
 The anchor retries at 2 s, 4 s and 8 s. Once is not enough: a debug write
 re-reads the payload and relays out after the first jump, and a permission alert

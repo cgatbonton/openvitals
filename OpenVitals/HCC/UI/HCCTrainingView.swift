@@ -32,6 +32,13 @@ struct HCCTrainingView: View {
   static let liveActivityIsAvailable = true
 
   @State private var confirmingCycleStart: CycleStart?
+  // HCC: the started session a "Cancel session" tap is asking about. Non-nil
+  // presents the confirmation; nothing is deleted until it is answered.
+  @State private var confirmingCancel: HCCTrainingSession?
+  // HCC: a partial "Finish session" or an "Add workout" waiting on its answer.
+  // One dialog for both, on a view of its own (the ScrollViewReader), so no two
+  // confirmation modifiers share a view.
+  @State private var sessionPrompt: SessionPrompt?
   // HCC: the conditioning title a live session was started for. Non-nil
   // presents the same setup sheet Home uses, pre-filled with that day's name so
   // the stored activity carries it.
@@ -39,6 +46,7 @@ struct HCCTrainingView: View {
 
   var body: some View {
     HCCScreen {
+      HCCReauthBanner(devices: store.hcc.devices)
       // The reader resolves against `HCCScreen`'s own ScrollView; its VStack
       // repeats the screen's spacing of 10, because this is now that stack's
       // single child. Same shape as cloud Home, and for the same reason: this
@@ -48,6 +56,63 @@ struct HCCTrainingView: View {
           screenContent
         }
         .onAppear { scrollToDebugAnchorIfRequested(scroller) }
+        // On the inner stack rather than beside the cycle dialog on the root, so
+        // the two confirmation modifiers never share a view.
+        .confirmationDialog(
+          "Cancel this session?",
+          isPresented: Binding(
+            get: { confirmingCancel != nil },
+            set: { if !$0 { confirmingCancel = nil } }
+          ),
+          titleVisibility: .visible
+        ) {
+          if let session = confirmingCancel {
+            Button("Cancel session", role: .destructive) {
+              confirmingCancel = nil
+              Task { await store.cancelHCCTrainingSession(session) }
+            }
+            Button("Keep session", role: .cancel) { confirmingCancel = nil }
+          }
+        } message: {
+          if let session = confirmingCancel { Text(Self.cancelMessage(session)) }
+        }
+      }
+      .confirmationDialog(
+        sessionPrompt?.question ?? "",
+        isPresented: Binding(
+          get: { sessionPrompt != nil },
+          set: { if !$0 { sessionPrompt = nil } }
+        ),
+        titleVisibility: .visible
+      ) {
+        switch sessionPrompt {
+        case let .finish(session, _)?:
+          Button("Finish session") {
+            sessionPrompt = nil
+            Task { await store.patchHCCTrainingSession(session, status: .done) }
+          }
+          Button("Keep logging", role: .cancel) { sessionPrompt = nil }
+        case let .addWorkout(date, _, titles)?:
+          ForEach(titles, id: \.self) { title in
+            Button(title) {
+              sessionPrompt = nil
+              addWorkout(date: date, title: title)
+            }
+          }
+          Button("Cancel", role: .cancel) { sessionPrompt = nil }
+        case let .remove(session, _)?:
+          Button("Remove", role: .destructive) {
+            sessionPrompt = nil
+            // The DELETE route, with the same optimistic remove + rollback the
+            // strength cancel uses; nothing about it is strength-specific.
+            Task { await store.cancelHCCTrainingSession(session) }
+          }
+          Button("Keep it", role: .cancel) { sessionPrompt = nil }
+        case nil:
+          EmptyView()
+        }
+      } message: {
+        if let detail = sessionPrompt?.detail { Text(detail) }
       }
     }
     .task {
@@ -133,9 +198,12 @@ struct HCCTrainingView: View {
       // A cycle nobody has trained yet has not spent its current week, so the
       // next calendar week is still that week — otherwise a mid-week reset of
       // the training maxes skips the new wave's 5s week. Same rule as the web.
+      // "Trained" means logged work, not a row: since 2026-09-29 a cycle start
+      // carries started-but-unlifted days onto the new cycle, and counting those
+      // would preview next week one wave step early.
       weekOffset: HCCFiveThreeOne.programWeekOffset(
         state.weekOffset,
-        cycleHasSessions: !data.cycleSessions.isEmpty
+        cycleHasSessions: data.cycleSessions.contains { !$0.isStillAPlan }
       )
     )
 
@@ -317,6 +385,56 @@ struct HCCTrainingView: View {
         // did. Day keys are 'YYYY-MM-DD', where string order IS date order.
         isPreview: day.date > data.todayYmd
       )
+      addWorkoutControl(day: day, data: data)
+    }
+  }
+
+  /// "Add workout" — a second (or third) conditioning session on a day that has
+  /// arrived, logged as done. 2026-10-03: a day used to be ONE thing, so a
+  /// CrossFit class on a lifting day could not be recorded without throwing the
+  /// lift away through the plan picker, whose PUT rewrites the day. This POSTs a
+  /// session and leaves the plan alone; the server allows any number of sessions
+  /// per day and is idempotent on (date, title), so the titles already on the
+  /// day are not offered again. Days ahead get no button — nothing has happened
+  /// on them to log.
+  @ViewBuilder
+  private func addWorkoutControl(day: HCCResolvedDay, data: HCCTrainingData) -> some View {
+    let titles = Self.addableWorkoutTitles(day: day, daySessions: data.sessions(on: day.date))
+    if day.date <= data.todayYmd, !titles.isEmpty {
+      HCCButtonRow(
+        secondary: HCCButtonSpec(title: "Add workout", isEnabled: !state.isWriting, systemImage: "plus") {
+          sessionPrompt = .addWorkout(
+            date: day.date,
+            heading: Self.promptDayName(day.date, todayYmd: data.todayYmd),
+            titles: titles
+          )
+        }
+      )
+    }
+  }
+
+  /// The conditioning workouts the catalog knows, minus the ones the day already
+  /// holds and minus the plan's own (its card is already on screen with its own
+  /// "Mark done"). Catalog titles only, because those are the ones the strip and
+  /// the cards know how to name.
+  static func addableWorkoutTitles(day: HCCResolvedDay, daySessions: [HCCTrainingSession]) -> [String] {
+    var taken = Set(daySessions.filter { $0.kind == .conditioning }.map(\.title))
+    if day.option == .conditioning { taken.insert(day.title) }
+    return HCCFiveThreeOne.dayOptionCatalog()
+      .filter { $0.option == .conditioning && !taken.contains($0.title) }
+      .map(\.title)
+  }
+
+  private func addWorkout(date: String, title: String) {
+    Task {
+      await store.startHCCTrainingSession(
+        HCCTrainingSessionCreate(
+          date: date,
+          kind: HCCTrainingSessionKind.conditioning.rawValue,
+          title: title,
+          status: HCCTrainingSessionStatus.done.rawValue
+        )
+      )
     }
   }
 
@@ -332,8 +450,8 @@ struct HCCTrainingView: View {
     return day.date < todayYmd ? "Earlier" : "Preview"
   }
 
-  /// A day, drawn as one card per lift for a strength day and one card for a
-  /// conditioning day.
+  /// A day, drawn as one card per lift for a strength day and one card per
+  /// conditioning workout — the plan's, and every one logged on the day.
   @ViewBuilder
   private func dayCards(
     day: HCCResolvedDay,
@@ -346,11 +464,13 @@ struct HCCTrainingView: View {
   ) -> some View {
     let daySessions = data.sessions(on: day.date)
     let strength = daySessions.first { $0.kind == .strength }
-    let conditioning = daySessions.first { $0.kind == .conditioning }
     // Logged work wins over the plan: a strength session on a conditioning day
-    // still shows its lifts, and the other way round.
+    // still shows its lifts, and the other way round. REVISED 2026-10-03: every
+    // conditioning session on the day gets its card, not just the first, since
+    // "Add workout" puts a second one on a day.
+    let conditioning = Self.conditioningEntries(day: day, daySessions: daySessions)
     let showsStrength = strength != nil || day.option == .strength
-    let showsConditioning = conditioning != nil || day.option == .conditioning
+    let showsConditioning = !conditioning.isEmpty
 
     if showsStrength {
       if let session = strength {
@@ -360,22 +480,27 @@ struct HCCTrainingView: View {
       }
     }
 
-    if showsConditioning {
+    ForEach(conditioning) { entry in
       HCCTrainingConditioningCard(
-        title: conditioning?.title ?? day.title,
-        subtitle: day.subtitle ?? "Conditioning",
+        title: entry.title,
+        subtitle: entry.subtitle,
         pillText: label,
         isPreview: isPreview,
-        isDone: conditioning?.status == .done,
-        isOptional: day.optional,
+        isDone: entry.session?.status == .done,
+        isOptional: entry.isOptional,
         isEnabled: !state.isWriting,
-        onMark: { markConditioning(day: day, session: conditioning) },
-        // HCC: the same setup sheet Home opens, named after this day.
+        onMark: { markConditioning(date: day.date, title: entry.title, session: entry.session) },
+        // HCC: the same setup sheet Home opens, named after this workout.
         onStartLive: Self.liveActivityIsAvailable
-          ? { liveTitle = HCCTrainingLiveStart(title: conditioning?.title ?? day.title) }
+          ? { liveTitle = HCCTrainingLiveStart(title: entry.title) }
+          : nil,
+        onRemove: entry.isAdded
+          ? entry.session.map { session in
+            { sessionPrompt = .remove(session: session, day: Self.promptDayName(day.date, todayYmd: data.todayYmd)) }
+          }
           : nil
       )
-      if let session = conditioning {
+      if let session = entry.session {
         noteCard(session: session)
       }
     }
@@ -394,6 +519,83 @@ struct HCCTrainingView: View {
     }
   }
 
+  /// One conditioning card's worth: a logged session, or the plan's workout
+  /// that has not been logged yet.
+  struct ConditioningEntry: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let isOptional: Bool
+    let session: HCCTrainingSession?
+    /// Logged on top of the day rather than being the day's own workout.
+    var isAdded = false
+  }
+
+  /// The plan's own workout first — logged or not — then every other
+  /// conditioning session on the day, in the payload's order, marked as added.
+  ///
+  /// The day's own session is the one titled as the day OR as one of its
+  /// weekday template's alternatives — a Tuesday offering Norwegian 4×4 /
+  /// CrossFit and logged as CrossFit is still Tuesday's workout, not an added
+  /// one. The web's `isAlternative` rule, and strict on purpose: a class added
+  /// to a Bouldering day must not stand in for the Bouldering. Before
+  /// 2026-10-03 the first session replaced the plan card whatever it was
+  /// called, which made a second workout on a planned day hide the planned one.
+  static func conditioningEntries(day: HCCResolvedDay, daySessions: [HCCTrainingSession]) -> [ConditioningEntry] {
+    let logged = daySessions.filter { $0.kind == .conditioning }
+    let alternatives = templateAlternatives(day.date)
+    let catalog = HCCFiveThreeOne.dayOptionCatalog()
+    func subtitle(_ title: String) -> String {
+      alternatives.first { $0.title == title }?.subtitle
+        ?? (title == day.title ? day.subtitle : nil)
+        ?? catalog.first { $0.option == .conditioning && $0.title == title }?.subtitle
+        ?? "Conditioning"
+    }
+    var entries: [ConditioningEntry] = []
+    if day.option == .conditioning {
+      let own = logged.first { session in
+        session.title == day.title || alternatives.contains { $0.title == session.title }
+      }
+      let title = own?.title ?? day.title
+      entries.append(
+        ConditioningEntry(
+          id: own?.id ?? "plan:\(day.date)",
+          title: title,
+          subtitle: subtitle(title),
+          isOptional: day.optional,
+          session: own
+        )
+      )
+    }
+    for session in logged where !entries.contains(where: { $0.session?.id == session.id }) {
+      entries.append(
+        ConditioningEntry(
+          id: session.id,
+          title: session.title,
+          subtitle: subtitle(session.title),
+          isOptional: false,
+          session: session,
+          isAdded: true
+        )
+      )
+    }
+    return entries
+  }
+
+  /// The weekday template's "which one?" alternatives for a day key — empty for
+  /// a weekday whose template offers none.
+  private static func templateAlternatives(_ dayKey: String) -> [HCCDayOption] {
+    let dow = HCCFiveThreeOne.dow(dayKey)
+    return HCCFiveThreeOne.weekTemplate.first { $0.dow == dow }?.options ?? []
+  }
+
+  /// How a prompt names a day mid-sentence: "today", else "Fri 2".
+  static func promptDayName(_ dayKey: String, todayYmd: String) -> String {
+    dayKey == todayYmd
+      ? "today"
+      : "\(HCCTrainingFormat.shortDow(dayKey)) \(HCCTrainingFormat.dayNumber(dayKey))"
+  }
+
   /// A strength day that has been started: the server's own stored sets, each
   /// tickable, and the AMRAP bar on the set that measures.
   @ViewBuilder
@@ -409,7 +611,9 @@ struct HCCTrainingView: View {
     ForEach(Self.groupByLift(session.sets, order: day.lifts), id: \.lift) { group in
       HCCTrainingLiftCard(
         lift: group.lift,
-        trainingMaxKg: cycle.tm(group.lift) ?? 0,
+        // The maxes this session was generated from, not the active cycle's —
+        // paging back to a finished wave must not re-label its sets.
+        trainingMaxKg: session.ownTm(group.lift) ?? cycle.tm(group.lift) ?? 0,
         week: week,
         pillText: label,
         isPreview: false,
@@ -427,10 +631,85 @@ struct HCCTrainingView: View {
             )
           }
         },
+        sessionIsFinished: session.status == .done,
         footer: { amrapFooter(session: session, sets: group.sets) }
       )
     }
     noteCard(session: session)
+    // Only while the day is still in progress: a finished session is history,
+    // and "cancel" is the wrong word for removing one.
+    if session.status != .done {
+      let logged = session.sets.filter { $0.actualReps != nil }.count
+      HCCButtonRow(
+        // 2026-10-03: Finish is how a half-logged session ends. Before it, the
+        // only ways out were logging every set (the server marks the session
+        // DONE on the last one) or Cancel, which deletes the sets that WERE
+        // logged. Withheld while nothing is logged — finishing an empty session
+        // records a workout that did not happen; Cancel is the exit for that.
+        primary: logged > 0
+          ? HCCButtonSpec(title: "Finish session", isEnabled: !state.isWriting, systemImage: "checkmark") {
+            finish(session: session, order: day.lifts)
+          }
+          : nil,
+        secondary: HCCButtonSpec(title: "Cancel session", isEnabled: !state.isWriting, isDestructive: true) {
+          confirmingCancel = session
+        }
+      )
+    } else {
+      // The web's "Reopen": back to PLANNED, sets untouched. A finish is a
+      // status, not a deletion, so it is always undoable.
+      HCCButtonRow(
+        secondary: HCCButtonSpec(title: "Reopen", isEnabled: !state.isWriting) {
+          Task { await store.patchHCCTrainingSession(session, status: .planned) }
+        }
+      )
+    }
+  }
+
+  /// Every set logged: finish at once. Some missing: ask first, naming what
+  /// will be recorded as not done. The PATCH does no set-completeness check, so
+  /// this question is the only place the shortfall is said out loud.
+  private func finish(session: HCCTrainingSession, order: [HCCLiftKey]) {
+    let logged = session.sets.filter { $0.actualReps != nil }.count
+    guard logged > 0 else { return }
+    if logged == session.sets.count {
+      Task { await store.patchHCCTrainingSession(session, status: .done) }
+    } else {
+      sessionPrompt = .finish(session: session, order: order)
+    }
+  }
+
+  /// "Military press not done. The 4 unlogged sets stay on record as not done…"
+  static func finishMessage(_ session: HCCTrainingSession, order: [HCCLiftKey]) -> String {
+    let unlogged = session.sets.filter { $0.actualReps == nil }.count
+    let missing = groupByLift(session.sets, order: order)
+      .filter { group in group.sets.allSatisfy { $0.actualReps == nil } }
+      .map(\.lift.label)
+    var parts: [String] = []
+    if !missing.isEmpty { parts.append("\(Self.listJoined(missing)) not done.") }
+    parts.append(
+      "The \(unlogged) unlogged set\(unlogged == 1 ? "" : "s") stay\(unlogged == 1 ? "s" : "") on record as not done; "
+        + "Reopen brings the session back."
+    )
+    return parts.joined(separator: " ")
+  }
+
+  /// "A", "A and B", "A, B and C".
+  private static func listJoined(_ items: [String]) -> String {
+    guard items.count > 1, let last = items.last else { return items.first ?? "" }
+    return items.dropLast().joined(separator: ", ") + " and " + last
+  }
+
+  /// What the confirmation says will go. Logged sets are named because they are
+  /// the one part a fresh Start cannot regenerate; the day's pick staying is
+  /// named because it is what makes the cancel useful.
+  static func cancelMessage(_ session: HCCTrainingSession) -> String {
+    let logged = session.sets.filter { $0.actualReps != nil }.count
+    let lost = logged == 0
+      ? "Nothing has been logged in it yet."
+      : "\(logged) logged set\(logged == 1 ? "" : "s") will be deleted."
+    return "\(session.title) is removed. \(lost) The day keeps its workout, so it goes back to a preview; "
+      + "start it again for sets from the current cycle and week."
   }
 
   @ViewBuilder
@@ -531,19 +810,54 @@ struct HCCTrainingView: View {
     .hccCard()
   }
 
-  private func markConditioning(day: HCCResolvedDay, session: HCCTrainingSession?) {
+  private func markConditioning(date: String, title: String, session: HCCTrainingSession?) {
     Task {
       if let session {
         await store.patchHCCTrainingSession(session, status: session.status == .done ? .planned : .done)
       } else {
         await store.startHCCTrainingSession(
           HCCTrainingSessionCreate(
-            date: day.date,
+            date: date,
             kind: HCCTrainingSessionKind.conditioning.rawValue,
-            title: day.title,
+            title: title,
             status: HCCTrainingSessionStatus.done.rawValue
           )
         )
+      }
+    }
+  }
+
+  /// The two questions `sessionPrompt` can ask.
+  private enum SessionPrompt {
+    /// A partial finish. `order` is the day's lift order, for naming the lifts
+    /// with nothing logged in the order they run.
+    case finish(session: HCCTrainingSession, order: [HCCLiftKey])
+    case addWorkout(date: String, heading: String, titles: [String])
+    /// Taking an ADDED conditioning workout off a day. `day` is the prompt's
+    /// name for that day ("today", "Fri 2").
+    case remove(session: HCCTrainingSession, day: String)
+
+    var question: String {
+      switch self {
+      case let .finish(session, _):
+        let logged = session.sets.filter { $0.actualReps != nil }.count
+        return "Finish with \(logged) of \(session.sets.count) sets logged?"
+      case let .addWorkout(_, heading, _):
+        return "Add a workout to \(heading)"
+      case let .remove(session, day):
+        return "Remove \(session.title) from \(day)?"
+      }
+    }
+
+    var detail: String {
+      switch self {
+      case let .finish(session, order):
+        return HCCTrainingView.finishMessage(session, order: order)
+      case .addWorkout:
+        return "Logged as done on that day, next to what is already there. The day's plan does not change."
+      case let .remove(session, _):
+        let note = (session.notes ?? "").isEmpty ? "" : ", along with its note"
+        return "\(session.title) comes off the day\(note). The rest of the day stays as it is."
       }
     }
   }
@@ -573,10 +887,13 @@ struct HCCTrainingView: View {
       )
     }
 
-    // Offered only for a freshly-started, still-empty cycle: the server refuses
-    // to delete a cycle that holds logged work, so this is never shown when it
-    // could not succeed.
-    if cycle.number > 1 && cycle.week == 1 && data.cycleSessions.isEmpty {
+    // Offered only for a freshly-started cycle with no logged work: the server
+    // refuses to delete a cycle that holds any, so this is never shown when it
+    // could not succeed. REVISED 2026-09-29: a cycle start now carries days that
+    // were started but not lifted onto the new cycle, and the revert hands them
+    // back — so an unlogged session no longer counts; `isEmpty` would have hidden
+    // the button after every such start.
+    if cycle.number > 1 && cycle.week == 1 && data.cycleSessions.allSatisfy(\.isStillAPlan) {
       specs.append(
         HCCButtonSpec(title: "Back to cycle \(cycle.number - 1) deload", isEnabled: !busy) {
           confirmingCycleStart = .revert(number: cycle.number)
@@ -728,6 +1045,9 @@ struct HCCTrainingView: View {
   ///   `amrap:<n>`             log n reps on today's first AMRAP set
   ///   `plan:<ymd>:<key>`      set that day to that `dayOptionCatalog` key
   ///   `note:<text>`           save a note on today's session
+  ///   `finish` / `reopen`     PATCH today's strength session DONE / PLANNED,
+  ///                           skipping the partial-finish question
+  ///   `add:<ymd>:<title>`     add a DONE conditioning workout to that day
   private func runDebugActionIfRequested() async {
     guard let raw = ProcessInfo.processInfo.environment["HCC_DEBUG_TRAINING_SAVE"], !raw.isEmpty,
           let data = state.data
@@ -768,6 +1088,19 @@ struct HCCTrainingView: View {
     case "note":
       guard let session = strength, parts.count > 1 else { return }
       await store.patchHCCTrainingSession(session, notes: .some(parts[1]))
+    case "finish", "reopen":
+      guard let session = strength else { return }
+      await store.patchHCCTrainingSession(session, status: parts[0] == "finish" ? .done : .planned)
+    case "add":
+      guard parts.count == 3 else { return }
+      await store.startHCCTrainingSession(
+        HCCTrainingSessionCreate(
+          date: parts[1],
+          kind: HCCTrainingSessionKind.conditioning.rawValue,
+          title: parts[2],
+          status: HCCTrainingSessionStatus.done.rawValue
+        )
+      )
     case "cycle":
       // `advanceWeek` / `setWeek:<n>` / `startNext` / `revertCycleStart` — the
       // wave controls, whose taps go through a confirmation the launch cannot
