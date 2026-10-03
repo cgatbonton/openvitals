@@ -140,6 +140,7 @@ struct HCCHealthLanding: View {
 
   var body: some View {
     HCCScreen {
+      HCCReauthBanner(devices: store.hcc.devices)
       // The subtitle names the cards below it, in their order. The handoff's
       // line stopped at Protocols because it drew four; Wearables is the fifth
       // and belongs in it — a header that lists four of five reads as the

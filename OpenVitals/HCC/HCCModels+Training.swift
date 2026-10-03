@@ -39,6 +39,23 @@ struct HCCTrainingSession: Codable, Identifiable, Hashable {
   let week: Int?
   let notes: String?
   let sets: [HCCTrainingSet]
+  /// The cycle whose training maxes generated these sets — not necessarily the
+  /// active one. A past week's card shows the maxes it was lifted under
+  /// (2026-09-29: last week's cycle-3 Squat card read the new cycle's 165, not
+  /// its own 160). Nil for conditioning; the view then falls back to the
+  /// active cycle.
+  let cycleNumber: Int?
+  let cycleTms: [String: Double]?
+
+  /// This session's own training max for a lift, else nil.
+  func ownTm(_ lift: HCCLiftKey) -> Double? { cycleTms?[lift.rawValue] }
+
+  /// Still only a plan: PLANNED with nothing logged. Mirrors `canRegenerate` in
+  /// `src/lib/training-plan.ts` — the server's rule for what a plan change or a
+  /// cycle start may rewrite, and what does not block undoing a cycle start.
+  var isStillAPlan: Bool {
+    status == .planned && sets.allSatisfy { $0.actualReps == nil }
+  }
 }
 
 enum HCCTrainingSessionKind: String, Codable, Hashable {
@@ -183,6 +200,12 @@ struct HCCTrainingSessionPatch: Encodable {
 
 struct HCCTrainingSessionAck: Decodable {
   let session: HCCTrainingSession
+}
+
+/// `DELETE /api/training/sessions/{id}` — cancelling a started session. The
+/// server removes the row and its sets and keeps the day's plan pick.
+struct HCCTrainingSessionDeleted: Decodable {
+  let deletedId: String
 }
 
 /// `PATCH /api/training/sets/{id}`. `null` clears the set back to un-performed.

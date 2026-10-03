@@ -143,6 +143,22 @@ final class HCCTrainingState: ObservableObject {
     data = current.replacing(session: session)
   }
 
+  /// Take a session the server has just confirmed, whether or not the payload
+  /// already knows about it. `replace` alone cannot do this: it maps over the
+  /// existing rows, so a session created a moment ago matches nothing and is
+  /// silently dropped.
+  fileprivate func adopt(session: HCCTrainingSession) {
+    guard let current = data else { return }
+    data = current.adopting(session: session)
+  }
+
+  /// Drop a session from the cached payload — the optimistic half of a cancel.
+  /// Its rollback is `adopt(session:)`, which puts the row back in date order.
+  fileprivate func remove(sessionId: String) {
+    guard let current = data else { return }
+    data = current.removing(sessionId: sessionId)
+  }
+
   fileprivate func replace(set updated: HCCTrainingSet, inSession sessionId: String) {
     guard let current = data else { return }
     data = current.replacing(set: updated, inSession: sessionId)
@@ -173,6 +189,40 @@ final class HCCTrainingState: ObservableObject {
 // row swapped — there is no way for a half-applied change to be observed.
 
 private extension HCCTrainingData {
+  /// Replace-or-insert, for a session the server has confirmed. Both lists are
+  /// kept in date order, the order the payload itself arrives in, so nothing
+  /// downstream has to care whether a row was adopted or fetched.
+  func adopting(session: HCCTrainingSession) -> HCCTrainingData {
+    guard !sessions.contains(where: { $0.id == session.id }) else { return replacing(session: session) }
+    return HCCTrainingData(
+      cycle: cycle,
+      todayYmd: todayYmd,
+      weekStartYmd: weekStartYmd,
+      sessions: (sessions + [session]).sorted { $0.dateYmd < $1.dateYmd },
+      // The cycle list is the strength log the wave math reads; a conditioning
+      // day is not part of it.
+      cycleSessions: session.kind == .strength
+        ? (cycleSessions + [session]).sorted { $0.dateYmd < $1.dateYmd }
+        : cycleSessions,
+      liftHistory: liftHistory,
+      weekPlan: weekPlan,
+      nextWeekPlan: nextWeekPlan
+    )
+  }
+
+  func removing(sessionId: String) -> HCCTrainingData {
+    HCCTrainingData(
+      cycle: cycle,
+      todayYmd: todayYmd,
+      weekStartYmd: weekStartYmd,
+      sessions: sessions.filter { $0.id != sessionId },
+      cycleSessions: cycleSessions.filter { $0.id != sessionId },
+      liftHistory: liftHistory,
+      weekPlan: weekPlan,
+      nextWeekPlan: nextWeekPlan
+    )
+  }
+
   func replacing(session: HCCTrainingSession) -> HCCTrainingData {
     HCCTrainingData(
       cycle: cycle,
@@ -197,7 +247,9 @@ private extension HCCTrainingData {
         status: session.status,
         week: session.week,
         notes: session.notes,
-        sets: session.sets.map { $0.id == updated.id ? updated : $0 }
+        sets: session.sets.map { $0.id == updated.id ? updated : $0 },
+        cycleNumber: session.cycleNumber,
+        cycleTms: session.cycleTms
       )
     }
     return HCCTrainingData(
@@ -347,7 +399,9 @@ extension HealthDataStore {
       status: status ?? session.status,
       week: session.week,
       notes: notes.map { $0 } ?? session.notes,
-      sets: session.sets
+      sets: session.sets,
+      cycleNumber: session.cycleNumber,
+      cycleTms: session.cycleTms
     )
     state.replace(session: optimistic)
     state.lastError = nil
@@ -370,9 +424,24 @@ extension HealthDataStore {
 
   /// Start a strength day, or log a conditioning day that has no session yet.
   ///
-  /// No optimistic row: a session's identity is its server id and its prescribed
-  /// sets are generated server-side from the cycle's training maxes. Inventing a
-  /// row here would put set ids on screen that nothing could later log against.
+  /// No optimistic row BEFORE the call: a session's identity is its server id and
+  /// its prescribed sets are generated server-side from the cycle's training
+  /// maxes. Inventing a row here would put set ids on screen that nothing could
+  /// later log against.
+  ///
+  /// The ack AFTER the call is the opposite case, and it used to be thrown away.
+  /// It carries the real session with its real set ids, so it is adopted the
+  /// moment it lands and the card flips to the started workout there and then.
+  /// Before this the only thing that could change the card was the full tracker
+  /// reload below — the whole session window with its sets, every cycle session,
+  /// the lift history and two resolved weeks — and until that round-tripped the
+  /// screen still read "Start session" with the button merely greyed. On gym LTE
+  /// that is seconds of a tap that looks ignored: Chris, 2026-09-15, tapped Start
+  /// at 16:32:37 (the server created the session on that tap, audit
+  /// `training.session.create`) and had re-picked the day in the dropdown by
+  /// 16:32:43, because THAT path already adopted its server response at once.
+  /// The reload still runs, and still wins, for everything the ack cannot know —
+  /// a reconciled cycle week, a regenerated later week.
   @discardableResult
   func startHCCTrainingSession(_ body: HCCTrainingSessionCreate) async -> Bool {
     let state = hccTraining
@@ -381,10 +450,38 @@ extension HealthDataStore {
     defer { state.set(writing: false) }
 
     do {
-      _ = try await HCCSession.shared.client.createTrainingSession(body)
+      let ack = try await HCCSession.shared.client.createTrainingSession(body)
+      state.adopt(session: ack.session)
       await reloadHCCTraining()
       return true
     } catch {
+      hccTrainingRecord(error)
+      return false
+    }
+  }
+
+  /// Cancel a started session: it leaves the screen at once, the server deletes
+  /// it with its sets, and the reload picks up whatever that moved — a derived
+  /// program week, the day falling back to its preview generated from the cycle
+  /// as it is NOW. The last part is the reason this exists (2026-09-29): a day
+  /// started in the deload week kept its deload sets through "Skip deload" and
+  /// through every re-pick, because a re-pick preserves the session's own week;
+  /// the only way out was switching the day to Rest and back. A failure puts the
+  /// session back and surfaces the server's message.
+  @discardableResult
+  func cancelHCCTrainingSession(_ session: HCCTrainingSession) async -> Bool {
+    let state = hccTraining
+    state.remove(sessionId: session.id)
+    state.lastError = nil
+    state.set(writing: true)
+    defer { state.set(writing: false) }
+
+    do {
+      try await HCCSession.shared.client.deleteTrainingSession(id: session.id)
+      await reloadHCCTraining()
+      return true
+    } catch {
+      state.adopt(session: session)
       hccTrainingRecord(error)
       return false
     }

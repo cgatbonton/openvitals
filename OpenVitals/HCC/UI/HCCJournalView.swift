@@ -42,10 +42,15 @@ private struct HCCJournalScreen: View {
   @Binding var selectedDate: Date
   @State private var didRunDebugLaunch = false
   @State private var didRunDebugSave = false
+  /// Which numeric behavior's field has the keypad, by behavior id. One value
+  /// for the whole screen so there is exactly one "Done" in the accessory bar;
+  /// a per-row toolbar would install one button per visible row.
+  @FocusState private var editingBehavior: String?
 
   var body: some View {
     ScrollViewReader { scroller in
       HCCScreen {
+        HCCReauthBanner(devices: store.hcc.devices)
         header
         if let error = state.lastError {
           HCCErrorNote(error, retry: { await store.loadJournal(day: dayKey, force: true) })
@@ -68,6 +73,14 @@ private struct HCCJournalScreen: View {
     }
     .task(id: state.doseWarning) { await clearDoseWarningAfterDelay() }
     .onAppear(perform: runDebugLaunchHookIfRequested)
+    .toolbar {
+      ToolbarItemGroup(placement: .keyboard) {
+        Spacer()
+        // `.decimalPad` has no return key, so without this the only way out of
+        // a count field is a tap somewhere else on the screen.
+        Button("Done") { editingBehavior = nil }
+      }
+    }
   }
 
   // ── The day being shown ────────────────────────────────────────────────────
@@ -151,7 +164,10 @@ private struct HCCJournalScreen: View {
           ForEach(Array(behaviors.enumerated()), id: \.element.id) { index, behavior in
             behaviorRow(behavior, day: day, showsDivider: index < behaviors.count - 1)
           }
-          HCCFootnote("Tap to answer yes or no. Long-press an answered behavior to clear it.")
+          HCCFootnote(
+            "Tap to answer yes or no, or tap a count to type it. "
+              + "Long-press an answered behavior to clear it."
+          )
             .padding(.top, 8)
         }
       } else if hasLoaded {
@@ -181,15 +197,34 @@ private struct HCCJournalScreen: View {
         onClear: { write(behavior, valueBool: nil, valueNum: nil) }
       )
     case .number:
+      let current = entry?.valueNum
       HCCBehaviorNumberRow(
         label: behavior.label,
         unit: behavior.unit ?? "",
-        value: Int((entry?.valueNum ?? 0).rounded()),
-        isAnswered: entry?.valueNum != nil,
+        valueText: Self.behaviorNumberText(current),
+        value: current ?? 0,
+        isAnswered: current != nil,
         showsDivider: showsDivider,
-        onChange: { count in
-          write(behavior, valueBool: nil, valueNum: Double(count))
-          answerCompanion(of: behavior, day: day, count: count)
+        fieldId: behavior.id,
+        focused: $editingBehavior,
+        onStep: { typed, delta in
+          // The number on screen is the one being stepped: what is typed if it
+          // parses, otherwise what the server holds. An unparseable draft is
+          // not treated as 0, which would turn a typo into a real answer.
+          let base = Self.parseBehaviorNumber(typed) ?? current ?? 0
+          commitNumber(behavior, day: day, value: base + delta)
+        },
+        onCommit: { typed in
+          guard let parsed = Self.parseBehaviorNumber(typed) else {
+            // Empty means "take the answer back" — the same third state the
+            // long press reaches. Anything else unparseable is refused, and
+            // the row snaps back to what the server holds.
+            guard typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+            if current != nil { write(behavior, valueBool: nil, valueNum: nil) }
+            return true
+          }
+          commitNumber(behavior, day: day, value: parsed)
+          return true
         },
         onClear: { write(behavior, valueBool: nil, valueNum: nil) }
       )
@@ -209,7 +244,7 @@ private struct HCCJournalScreen: View {
   /// zero does NOT turn it off, because "0 units" and "did not drink" are not
   /// the same claim and this app does not overwrite an answer the owner gave.
   /// Clearing stays the long press on the row itself.
-  private func answerCompanion(of behavior: HCCJournalBehavior, day: HCCJournalDay, count: Int) {
+  private func answerCompanion(of behavior: HCCJournalBehavior, day: HCCJournalDay, count: Double) {
     guard count > 0,
           let base = Self.companionSlug(of: behavior.slug),
           let companion = day.visibleBehaviors.first(where: {
@@ -234,6 +269,38 @@ private struct HCCJournalScreen: View {
   private static func answer(_ entry: HCCJournalEntry?) -> HCCBehaviorAnswer {
     guard let value = entry?.valueBool else { return .unanswered }
     return value ? .yes : .no
+  }
+
+  /// The one place a typed or stepped count becomes a stored number: clamped to
+  /// the row's range, rounded to the two decimals the server's floats carry, and
+  /// written only when it actually differs from what is already on the day.
+  private func commitNumber(_ behavior: HCCJournalBehavior, day: HCCJournalDay, value: Double) {
+    let range = HCCBehaviorNumberRow.range
+    let clamped = min(max(value, range.lowerBound), range.upperBound)
+    let rounded = (clamped * 100).rounded() / 100
+    guard rounded != day.entry(behaviorId: behavior.id)?.valueNum else { return }
+    write(behavior, valueBool: nil, valueNum: rounded)
+    answerCompanion(of: behavior, day: day, count: rounded)
+  }
+
+  /// "3.2", "1", "0.1" — the count as the field shows it, and EMPTY when the
+  /// behavior is unanswered, because the placeholder is what says "not logged"
+  /// there; a 0 would be a real answer ("Unanswered Is Not No").
+  static func behaviorNumberText(_ value: Double?) -> String {
+    guard let value else { return "" }
+    let rounded = (value * 100).rounded() / 100
+    if rounded == rounded.rounded() { return String(Int(rounded)) }
+    return String(format: "%g", rounded)
+  }
+
+  /// The decimal pad offers whichever separator the phone's locale uses, and
+  /// this instance's owner is on a comma locale, so "34,5" has to parse as
+  /// readily as "34.5". Nil for anything that is not a plain number — including
+  /// empty, which the caller reads as "clear the answer".
+  static func parseBehaviorNumber(_ text: String) -> Double? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    return Double(trimmed.replacingOccurrences(of: ",", with: "."))
   }
 
   private func write(_ behavior: HCCJournalBehavior, valueBool: Bool?, valueNum: Double?) {

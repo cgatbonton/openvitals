@@ -124,18 +124,41 @@ private struct HCCBehaviorAnswerPill: View {
   }
 }
 
-/// A numeric behavior: a stepper in the behavior's own unit.
+/// A numeric behavior: a typed field in the behavior's own unit, with a step
+/// button either side of it.
 ///
 /// Zero is a real answer ("no drinks"), so it is not used to mean "not logged".
-/// The row says which it is in words instead, and a long press clears it.
+/// The row says which it is in words instead. TWO things clear an answer now: a
+/// long press on the row, and emptying the field — a blank that saved 0 would
+/// manufacture an answer the owner never gave, which is the same mistake
+/// "Unanswered Is Not No" forbids on the yes/no side.
+///
+/// The number arrives ALREADY FORMATTED as `valueText`, and the typed string
+/// goes back out raw, so every Double-to-String conversion stays on the screen
+/// (see the note at the top of this file). `value` is here only so the step
+/// buttons have something to enable themselves against.
 struct HCCBehaviorNumberRow: View {
+  /// The clamp both the steppers and a typed number are held to. Wide on
+  /// purpose: the ferment ladder's own ceiling was removed 2026-09-11 and 3
+  /// cups is already 48 tbsp, so a tight cap here would silently eat a real
+  /// answer the moment that rung advanced.
+  static let range: ClosedRange<Double> = 0...999
+
   let label: String
   let unit: String
-  let value: Int
+  let valueText: String
+  let value: Double
   let isAnswered: Bool
-  var range: ClosedRange<Int> = 0...50
   var showsDivider: Bool = true
-  let onChange: (Int) -> Void
+  let fieldId: String
+  let focused: FocusState<String?>.Binding
+  /// What is typed right now, plus the ±1 the tap asks for. Both travel
+  /// together so the screen can step from the number ON SCREEN rather than from
+  /// a server value a half-finished edit has already moved past.
+  let onStep: (String, Double) -> Void
+  /// The raw typed string, on blur. The screen answers whether it took it;
+  /// `false` snaps the field back to `valueText`.
+  let onCommit: (String) -> Bool
   let onClear: () -> Void
 
   var body: some View {
@@ -153,11 +176,14 @@ struct HCCBehaviorNumberRow: View {
           }
         }
         Spacer(minLength: 8)
-        HCCBehaviorCountStepper(
+        HCCBehaviorCountField(
+          valueText: valueText,
           value: value,
           unit: unit,
-          range: range,
-          onChange: onChange
+          fieldId: fieldId,
+          focused: focused,
+          onStep: onStep,
+          onCommit: onCommit
         )
       }
       .padding(.vertical, 9)
@@ -170,36 +196,104 @@ struct HCCBehaviorNumberRow: View {
   }
 }
 
-/// The count column of a numeric behavior: two 26-pt controls around the number
-/// itself, sized and coloured to sit in the same column as the yes/no pill.
+/// The count column of a numeric behavior: a typed field with a 26-pt step
+/// button either side, sized and coloured to sit in the same column as the
+/// yes/no pill.
 ///
 /// Private rather than `HCCStepper` (the sheets' stepper) for two reasons the
 /// handoff is explicit about: the count reads MUTED mono here, not accent — it
-/// is an answer, not a control's current setting — and the buttons carry a fill
-/// with no hairline, which is the "Tinted" rule for every control on these
-/// screens. Behaviour is `HCCStepper`'s, unchanged: ±1, clamped to `range`, and
-/// the same `onChange` a tap on the sheet's stepper makes.
-private struct HCCBehaviorCountStepper: View {
-  let value: Int
+/// is an answer, not a control's current setting — and the controls carry a
+/// fill with no hairline, which is the "Tinted" rule for every control on these
+/// screens. The field takes that same fill now that the number is itself a
+/// control, and tints only WHILE it is being edited, which is a state rather
+/// than a resting style, so the muted rule still holds.
+///
+/// The field accepts DECIMALS (Chris, 2026-09-21). A waist in inches, a dose in
+/// millilitres or half a cup of kraut is not a whole number, and ±1 cannot
+/// reach one; before this the row also rounded whatever the server held to the
+/// nearest integer and wrote that back on the next tap, so a 34.5 could not
+/// survive being looked at.
+///
+/// Typing does not write. The value is committed when editing ENDS, the way
+/// `HCCTrainingNoteField` and the web page both do, so a half-typed "3" on the
+/// way to "3.5" never reaches the server.
+private struct HCCBehaviorCountField: View {
+  let valueText: String
+  let value: Double
   let unit: String
-  let range: ClosedRange<Int>
-  let onChange: (Int) -> Void
+  let fieldId: String
+  let focused: FocusState<String?>.Binding
+  let onStep: (String, Double) -> Void
+  let onCommit: (String) -> Bool
+
+  @State private var draft: String = ""
+  /// Set for the one blur a step button causes: the tap has already handed the
+  /// draft to the screen, so committing it again on the way out would write the
+  /// same edit twice — once stepped, once not.
+  @State private var stepIsHandlingBlur = false
+
+  private var isEditing: Bool { focused.wrappedValue == fieldId }
 
   var body: some View {
     HStack(spacing: 8) {
-      button("minus", enabled: value - 1 >= range.lowerBound) {
-        onChange(max(range.lowerBound, value - 1))
+      button("minus", enabled: value - 1 >= HCCBehaviorNumberRow.range.lowerBound) { step(-1) }
+      HStack(spacing: 3) {
+        // The em dash placeholder is this app's "no finding yet". An unanswered
+        // count must not sit here reading 0, which is a real answer.
+        TextField("\u{2014}", text: $draft)
+          .font(HCCTheme.Font.data(size: 11))
+          .monospacedDigit()
+          .foregroundStyle(isEditing ? HCCTheme.Color.accentText : HCCTheme.Color.muted)
+          .multilineTextAlignment(.trailing)
+          .keyboardType(.decimalPad)
+          .autocorrectionDisabled()
+          .textInputAutocapitalization(.never)
+          .focused(focused, equals: fieldId)
+          .frame(width: 40)
+          .accessibilityLabel("Count")
+        if !unit.isEmpty {
+          Text(unit)
+            .font(HCCTheme.Font.data(size: 11))
+            .foregroundStyle(HCCTheme.Color.muted)
+            .lineLimit(1)
+        }
       }
-      Text(unit.isEmpty ? "\(value)" : "\(value) \(unit)")
-        .font(HCCTheme.Font.data(size: 11))
-        .monospacedDigit()
-        .foregroundStyle(HCCTheme.Color.muted)
-        .lineLimit(1)
-        .frame(minWidth: 40, alignment: .trailing)
-      button("plus", enabled: value + 1 <= range.upperBound) {
-        onChange(min(range.upperBound, value + 1))
-      }
+      .padding(.horizontal, 6)
+      .padding(.vertical, 5)
+      .background(
+        RoundedRectangle(cornerRadius: HCCTheme.Radius.small, style: .continuous)
+          .fill(HCCTheme.Color.control2)
+      )
+      .contentShape(Rectangle())
+      // The unit sits OUTSIDE the field so the typed text parses cleanly, which
+      // would leave it a dead spot — this makes the whole pill open the keypad.
+      .onTapGesture { focused.wrappedValue = fieldId }
+      button("plus", enabled: value + 1 <= HCCBehaviorNumberRow.range.upperBound) { step(1) }
     }
+    .onAppear { draft = valueText }
+    // The server's own value wins whenever the field is not being edited, so a
+    // reconcile or a rolled-back write still reaches the screen.
+    .onChange(of: valueText) { _, text in
+      if !isEditing { draft = text }
+    }
+    .onChange(of: focused.wrappedValue) { previous, current in
+      guard previous == fieldId, current != fieldId else { return }
+      if stepIsHandlingBlur {
+        stepIsHandlingBlur = false
+        return
+      }
+      if !onCommit(draft) { draft = valueText }
+    }
+  }
+
+  /// A step tap while the keypad is open carries the draft with it, so the
+  /// typed number is what gets stepped and the blur that follows stays quiet.
+  private func step(_ delta: Double) {
+    if isEditing {
+      stepIsHandlingBlur = true
+      focused.wrappedValue = nil
+    }
+    onStep(draft, delta)
   }
 
   private func button(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {

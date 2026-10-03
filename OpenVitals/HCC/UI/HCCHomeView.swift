@@ -33,6 +33,10 @@ struct HCCHomeView: View {
         // bottom padding to separate itself from the next one.
         VStack(alignment: .leading, spacing: 12) {
           topBar
+          // A dead connection is the reason the rings below can be a day old,
+          // so it is stated immediately above them rather than on one screen
+          // the owner has to think to open (2026-09-16, Chris).
+          HCCReauthBanner(devices: store.hcc.devices)
           // Only when the day itself did not arrive. A partial failure — the
           // benign 404 `/sleep/latest` answers with on a day with no night, say
           // — must not put a red line over a screen that filled correctly.

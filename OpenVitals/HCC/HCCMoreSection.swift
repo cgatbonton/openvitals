@@ -39,6 +39,7 @@ struct HCCMoreScreen: View {
       // carries a bottom padding to make a gap.
       VStack(alignment: .leading, spacing: 18) {
         HCCDetailHeader(title: "More", showsBack: false)
+        HCCReauthBanner(devices: healthStore.hcc.devices)
         accountCard
         devicesCard
         notificationsCard

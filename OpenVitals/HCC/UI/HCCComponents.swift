@@ -1174,3 +1174,78 @@ struct HCCFlowRow<Content: View>: View {
     }
   }
 }
+
+// ── Reconnect banner ─────────────────────────────────────────────────────────
+
+/// The one card allowed on every tab root: a pull-based connection has stopped
+/// refreshing, so every number on every screen is serving whatever landed
+/// before it broke.
+///
+/// Added 2026-09-16 (Chris): "when Fitbit gets disconnected, the reconnect
+/// notification only shows on the wearables page — it needs to show on all
+/// pages, and it also needs to show in the mobile app." The phone's only signal
+/// until now was the amber dot on the device pill, which says the same thing to
+/// someone already looking at it. The server's disconnect push fires once, on
+/// the ACTIVE→NEEDS_REAUTH edge, and Google's grant expires roughly weekly, so
+/// a missed banner meant days of a frozen ring reading as this morning's.
+///
+/// Why a card on each tab root and not one overlay on the shell: `HCCScreen`
+/// decides its bottom clearance by reading its own TOP safe-area inset, so
+/// anything that changes that inset — a banner above the `TabView`, or a top
+/// overlay — makes every screen believe it is a sheet and tuck its last card
+/// under the floating tab bar. A card inside the holding stack costs nothing
+/// structurally and obeys "card spacing is stack spacing".
+///
+/// The CTA leaves the app on purpose. Reconnecting is an OAuth round trip
+/// against the instance's web session, which the app cannot complete in-process;
+/// it is the same URL the disconnect push has always opened.
+struct HCCReauthBanner: View {
+  let devices: [HCCDevice]
+  @Environment(\.openURL) private var openURL
+
+  /// Statuses that mean the pull is dead. `n/a` is a source that PUSHES to us
+  /// (Apple Health) and has no grant to expire, so it can never appear here.
+  private static let brokenStatuses: Set<String> = ["NEEDS_REAUTH", "REVOKED"]
+
+  private var broken: [HCCDevice] {
+    devices.filter { Self.brokenStatuses.contains($0.status) }
+  }
+
+  /// Named when it is one device, counted when it is more — the brand name is
+  /// the useful half, and it goes through `HCCCopy` like every other device
+  /// label on the cloud surface (Copy Rule, docs/hcc-provider.md).
+  private var headline: String {
+    guard broken.count == 1, let one = broken.first else {
+      return "\(broken.count) connections need reconnecting"
+    }
+    return "\(HCCCopy.sourceLabel(one.source)) needs reconnecting"
+  }
+
+  var body: some View {
+    if !broken.isEmpty {
+      VStack(alignment: .leading, spacing: 8) {
+        HCCLabel("Sync paused", color: HCCTheme.Color.warn)
+        Text(headline)
+          .font(HCCTheme.Font.body(size: 14, weight: .semibold))
+          .foregroundStyle(HCCTheme.Color.text)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(
+          "The connection expired and could not refresh itself. Numbers on every screen stop "
+            + "advancing until it is reconnected."
+        )
+        .font(HCCTheme.Font.body(size: 12.5))
+        .foregroundStyle(HCCTheme.Color.muted)
+        .fixedSize(horizontal: false, vertical: true)
+        HCCButtonRow(
+          primary: HCCButtonSpec(title: "Reconnect", systemImage: "arrow.clockwise") {
+            openURL(HCCSession.shared.baseURL.appendingPathComponent("wearables"))
+          }
+        )
+        .padding(.top, 2)
+      }
+      .hccCard(tint: HCCTheme.Color.warn)
+      .accessibilityElement(children: .contain)
+      .accessibilityLabel("\(headline). Sync is paused until you reconnect.")
+    }
+  }
+}

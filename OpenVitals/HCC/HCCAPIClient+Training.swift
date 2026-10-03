@@ -51,6 +51,13 @@ extension HCCAPIClient {
     try await patchBare("\(Self.trainingRoot)/sessions/\(id)", body: body)
   }
 
+  /// Cancel a started session. The row and its sets go; the day keeps its
+  /// pick, so it falls back to a preview that starts from the cycle as it is now.
+  @discardableResult
+  func deleteTrainingSession(id: String) async throws -> HCCTrainingSessionDeleted {
+    try await deleteBare("\(Self.trainingRoot)/sessions/\(id)")
+  }
+
   /// The hot path — one tap on a checkbox between sets.
   @discardableResult
   func patchTrainingSet(id: String, actualReps: Int?) async throws -> HCCTrainingSetAck {
